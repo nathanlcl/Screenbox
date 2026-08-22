@@ -1,0 +1,50 @@
+name: Mirror libmpv binaries
+
+# Maintenance workflow (SPEC section 8.3): mirrors the pinned shinchiro/mpv-winbuild-cmake
+# dev packages into this repository's "libmpv-<tag>" release. Run manually once per libmpv
+# version bump; daily CI only downloads from the mirror and falls back to upstream.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'shinchiro release tag to mirror (empty = tag pinned in libmpv.version)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Download upstream packages and verify SHA256
+      shell: pwsh
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+      run: .\scripts\mirror-libmpv.ps1 -Tag "$env:INPUT_TAG" -OutputDirectory .\mirror-out
+
+    - name: Publish mirror release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $pin = Get-Content .\libmpv.version -Raw | ConvertFrom-Json
+        $tag = $pin.shinchiroTag
+        $releaseTag = "libmpv-$tag"
+        $files = Get-ChildItem .\mirror-out\*.7z
+        if ($files.Count -eq 0) { throw "No verified packages found in .\mirror-out" }
+        $notes = ($files | ForEach-Object { "* ``$($_.Name)``" }) -join "`n"
+        $notes = "Mirror of shinchiro/mpv-winbuild-cmake release $tag (see libmpv.version).`n`n$notes"
+        gh release view $releaseTag --repo $env:GITHUB_REPOSITORY 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "Release $releaseTag already exists, uploading with --clobber"
+          gh release upload $releaseTag $files.FullName --clobber --repo $env:GITHUB_REPOSITORY
+        } else {
+          gh release create $releaseTag $files.FullName --repo $env:GITHUB_REPOSITORY --title "libmpv $tag" --notes $notes
+        }
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -24,6 +24,10 @@ jobs:
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v3
 
+    - name: Fetch libmpv native binaries
+      shell: pwsh
+      run: .\scripts\fetch-libmpv.ps1 -Platform x64
+
     - name: Restore nuget packages
       shell: pwsh
       run: msbuild Screenbox.slnx -t:restore -p:RestoreConfigFile=nuget.config -p:RestoreLockedMode=false -p:Platform=x64 -p:Configuration=Release
