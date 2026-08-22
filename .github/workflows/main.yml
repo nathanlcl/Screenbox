@@ -7,6 +7,7 @@ on:
     tags:
     - v**
   pull_request:
+  workflow_dispatch:
 
 jobs:
   xaml-lint:
@@ -88,6 +89,10 @@ jobs:
 
     - name: Update package manifest
       run: .\scripts\update-manifest.ps1 -Version "${{ steps.get-tag-version.outputs.version }}"
+
+    - name: Fetch libmpv native binaries
+      shell: pwsh
+      run: .\scripts\fetch-libmpv.ps1 -Platform ${{ matrix.platform }}
 
     - name: Build store package
       env:
