@@ -38,8 +38,8 @@ internal static unsafe partial class MpvNative
     /// 注册只读自定义协议。open_fn 在 mpv 内部线程调用，须尽快返回；
     /// user_data 透传给 open_fn。
     /// </summary>
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial int mpv_stream_cb_add_ro(
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_stream_cb_add_ro(
         MpvHandleNative* ctx, byte* protocol, void* user_data,
         delegate* unmanaged[Cdecl]<void*, byte*, MpvStreamCbInfo*, int> open_fn);
 }
