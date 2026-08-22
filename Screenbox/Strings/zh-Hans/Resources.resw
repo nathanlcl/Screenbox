@@ -759,10 +759,10 @@
   <data name="SetPlaybackOptionsHelpTextLine2" xml:space="preserve">
     <value>某些选项可能只能全局设置。</value>
   </data>
-  <data name="VlcCommandLineHelpLink" xml:space="preserve">
+  <data name="MpvCommandLineHelpLink" xml:space="preserve">
     <value>VLC 命令行帮助</value>
   </data>
-  <data name="VlcCommandLineHelpText" xml:space="preserve">
+  <data name="MpvCommandLineHelpText" xml:space="preserve">
     <value>请参阅 {0} 查看可用选项的完整列表。</value>
     <comment>{0} = VLC command-line help</comment>
   </data>
