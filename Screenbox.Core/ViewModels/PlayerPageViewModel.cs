@@ -601,7 +601,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     /// </list>
     /// </remarks>
     /// <param name="key">The key that was pressed.</param>
-    /// <param name="modifiers">A bitwise combination of the enumeration values that specifies the modifier keys held during the key press.</param>
+    /// <param name="modifiers">The modifier keys held during the key press.</param>
     /// <param name="currentSize">The size of the current window.</param>
     public void HandleResizeKey(VirtualKey key, VirtualKeyModifiers modifiers, Size currentSize)
     {
