@@ -275,7 +275,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
                 if (items.Count > 0)
                 {
                     if (items.Count == 1 && items[0] is StorageFile file && file.IsSupportedSubtitle() &&
-                        MediaPlayer is VlcMediaPlayer player && Media?.Item.Value != null)
+                        MediaPlayer is { } player && Media?.Item.Value != null)
                     {
                         Media.Item.Value.SubtitleTracks.AddExternalSubtitle(player, file, true);
                         Messenger.Send(new SubtitleAddedNotificationMessage(file));
@@ -543,8 +543,8 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
 
         double delta = key switch
         {
-            VK_OEM_PERIOD => PlaybackRateStep,  // Shift + . (">")
-            VK_OEM_COMMA => -PlaybackRateStep,  // Shift + , ("<")
+            VK_OEM_PERIOD => PlaybackRateStep,  // Shift + . (">" )
+            VK_OEM_COMMA => -PlaybackRateStep,  // Shift + , ("<" )
             _ => 0.0,
         };
 
@@ -601,7 +601,7 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
     /// </list>
     /// </remarks>
     /// <param name="key">The key that was pressed.</param>
-    /// <param name="modifiers">The modifier keys held during the key press.</param>
+    /// <param name="modifiers">A bitwise combination of the enumeration values that specifies the modifier keys held during the key press.</param>
     /// <param name="currentSize">The size of the current window.</param>
     public void HandleResizeKey(VirtualKey key, VirtualKeyModifiers modifiers, Size currentSize)
     {
@@ -623,8 +623,8 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
             VirtualKey.Number2 when modifiers == VirtualKeyModifiers.None => 1.0,
             VirtualKey.Number3 when modifiers == VirtualKeyModifiers.None => 1.5,
             VirtualKey.Number4 when modifiers == VirtualKeyModifiers.None => 0.0,
-            VK_OEM_PLUS when modifiers == VirtualKeyModifiers.Control => 1 + desiredStep,   // Plus  ("+")
-            VK_OEM_MINUS when modifiers == VirtualKeyModifiers.Control => 1 - desiredStep,  // Minus ("-")
+            VK_OEM_PLUS when modifiers == VirtualKeyModifiers.Control => 1 + desiredStep,   // Plus  ("+" )
+            VK_OEM_MINUS when modifiers == VirtualKeyModifiers.Control => 1 - desiredStep,  // Minus ("-" )
             _ => null,
         };
 
