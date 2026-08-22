@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Screenbox.Core.ViewModels;
 using Windows.UI.Xaml.Controls;
@@ -18,18 +17,11 @@ public sealed partial class SettingsPage : Page
 
     internal CommonViewModel Common { get; }
 
-    private string[] VlcCommandLineHelpTextParts { get; }
-
     public SettingsPage()
     {
         this.InitializeComponent();
         DataContext = Ioc.Default.GetRequiredService<SettingsPageViewModel>();
         Common = Ioc.Default.GetRequiredService<CommonViewModel>();
-
-        var helpText = Strings.Resources.VlcCommandLineHelpText;
-        VlcCommandLineHelpTextParts = helpText.Contains("{0}")
-            ? helpText.Split("{0}").Select(s => s.Trim()).Take(2).ToArray()
-            : new[] { helpText, string.Empty };
 
         // Set the "System default" language option string
         var systemLanguageOption = ViewModel.AvailableLanguages[0];

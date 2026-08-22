@@ -1,4 +1,7 @@
+using System;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using CommunityToolkit.Mvvm.Messaging;
+using Screenbox.Core.Messages;
 using Screenbox.Core.ViewModels;
 using Windows.UI.Input;
 using Windows.UI.Xaml;
@@ -53,12 +56,18 @@ public sealed partial class PlayerElement : UserControl
         }
     }
 
-    private void VlcVideoView_OnInitialized(object sender, VideoViewInitializedEventArgs e)
+    private void MpvVideoView_OnInitialized(object sender, EventArgs e)
     {
-        ViewModel.Initialize(e.SwapChainOptions);
+        ViewModel.Initialize(Array.Empty<string>());
     }
 
-    private void VlcVideoView_OnSizeChanged(object sender, SizeChangedEventArgs e)
+    private void MpvVideoView_OnRenderFailed(object sender, Exception e)
+    {
+        // 渲染层双后端均不可用：提示用户（与 VLC 时代 D3D11 不可用提示一致）
+        WeakReferenceMessenger.Default.Send(new CriticalErrorMessage(Strings.Resources.CriticalErrorDirect3D11NotAvailable));
+    }
+
+    private void MpvVideoView_OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         ViewModel.UpdatePlayerViewSize(e.NewSize);
     }

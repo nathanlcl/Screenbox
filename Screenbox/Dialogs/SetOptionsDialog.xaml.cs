@@ -20,18 +20,19 @@ public sealed partial class SetOptionsDialog : ContentDialog
 
     private string OptionTextBoxPlaceholder { get; }
 
-    private string[] VlcCommandLineHelpTextParts { get; }
+    private string[] MpvCommandLineHelpTextParts { get; }
 
     public SetOptionsDialog(string existingOptions, bool global = false)
     {
         this.InitializeComponent();
         FlowDirection = GlobalizationHelper.GetFlowDirection();
         RequestedTheme = ((FrameworkElement)Window.Current.Content).RequestedTheme;
-        OptionTextBoxPlaceholder = global ? "--option=value" : ":option=value";
+        // mpv option syntax: --key=value applies both globally (player init) and per-file (loadfile)
+        OptionTextBoxPlaceholder = "--key=value";
         Options = existingOptions;
         OptionsTextBox.Text = Options;
-        var helpText = Strings.Resources.VlcCommandLineHelpText;
-        VlcCommandLineHelpTextParts = helpText.Contains("{0}")
+        var helpText = Strings.Resources.MpvCommandLineHelpText;
+        MpvCommandLineHelpTextParts = helpText.Contains("{0}")
             ? helpText.Split("{0}").Select(s => s.Trim()).Take(2).ToArray()
             : new[] { helpText, string.Empty };
 

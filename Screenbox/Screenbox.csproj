@@ -37,7 +37,6 @@
     <PackageReference Include="CommunityToolkit.Uwp.Controls.SettingsControls" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.Uwp.Converters" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.Uwp.Extensions" Version="8.2.251219" />
-    <PackageReference Include="LibVLC.UWP" Version="3.0.23-2608082208" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
     <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.7" />
@@ -59,6 +58,15 @@
     <PRIResource Remove="Strings\sr-SP\*.resw" />
     <PRIResource Remove="Strings\sv-SE\*.resw" />
     <PRIResource Remove="Strings\ta-IN\*.resw" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- libmpv native binary, staged per-architecture by scripts/fetch-libmpv.ps1.
+         Lands at the MSIX package root (exe directory) so the default DLL search order finds it. -->
+    <Content Include="Native\$(Platform)\libmpv-2.dll" Condition="Exists('Native\$(Platform)\libmpv-2.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libmpv-2.dll</Link>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
