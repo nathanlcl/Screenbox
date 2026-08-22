@@ -247,7 +247,8 @@
                                        MirroredWhenRightToLeft=True}"
                     IsEnabled="{x:Bind IsCastButtonEnabled(ViewModel.HasActiveItem), Mode=OneWay}"
                     KeyTipPlacementMode="Left"
-                    Text="{x:Bind strings:Resources.Cast}">
+                    Text="{x:Bind strings:Resources.Cast}"
+                    Visibility="{x:Bind IsCastSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <MenuFlyoutItem.KeyboardAccelerators>
                         <KeyboardAccelerator Key="K" Modifiers="Control" />
                     </MenuFlyoutItem.KeyboardAccelerators>
