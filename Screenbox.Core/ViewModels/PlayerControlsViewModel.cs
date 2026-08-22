@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -271,21 +272,13 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
     partial void OnAudioTimingOffsetChanged(double value)
     {
         if (MediaPlayer == null) return;
-
-        if (MediaPlayer is VlcMediaPlayer vlcMediaPlayer)
-        {
-            vlcMediaPlayer.AudioDelay = value;
-        }
+        MediaPlayer.AudioDelay = value;
     }
 
     partial void OnSubtitleTimingOffsetChanged(double value)
     {
         if (MediaPlayer == null) return;
-
-        if (MediaPlayer is VlcMediaPlayer vlcMediaPlayer)
-        {
-            vlcMediaPlayer.SubtitleDelay = value;
-        }
+        MediaPlayer.SubtitleDelay = value;
     }
 
     private void PlayQueueOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -464,23 +457,20 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
 
     private async Task<StorageFile> SaveSnapshotInternalAsync(IMediaPlayer mediaPlayer)
     {
-        if (mediaPlayer is not VlcMediaPlayer player)
-        {
-            throw new NotImplementedException("Not supported on non VLC players");
-        }
-
         StorageFolder tempFolder = await ApplicationData.Current.TemporaryFolder.CreateFolderAsync(
             $"snapshot_{DateTimeOffset.Now.Ticks}",
             CreationCollisionOption.FailIfExists);
 
         try
         {
-            if (!player.VlcPlayer.TakeSnapshot(0, tempFolder.Path, 0, 0))
-                throw new Exception("VLC failed to save snapshot");
+            // mpv screenshot-to-file 输出 png；SaveSnapshot 内部轮询写盘完成（≤2s），可能阻塞，放后台线程
+            string fileName = $"Screenbox_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.png";
+            string filePath = Path.Combine(tempFolder.Path, fileName);
+            await Task.Run(() => mediaPlayer.SaveSnapshot(filePath));
 
-            StorageFile file = (await tempFolder.GetFilesAsync())[0];
+            StorageFile file = await tempFolder.GetFileAsync(fileName);
             StorageFolder destFolder = await _filesService.GetFrameCaptureFolderAsync(_settingsService.FrameCaptureFolderToken);
-            return await file.CopyAsync(destFolder, $"Screenbox_{DateTimeOffset.Now:yyyyMMdd_HHmmss}{file.FileType}",
+            return await file.CopyAsync(destFolder, fileName,
                 NameCollisionOption.GenerateUniqueName);
         }
         finally
