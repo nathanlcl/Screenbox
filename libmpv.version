@@ -1,0 +1,18 @@
+{
+  "shinchiroTag": "20260814",
+  "gitHash": "7b8915bc1d",
+  "architectures": {
+    "x64": {
+      "file": "mpv-dev-x86_64-20260814-git-7b8915bc1d.7z",
+      "sha256": "0af22b28e920620036d3ae08fd9283156dc9af0420bf4df84b0e02282094599c"
+    },
+    "x86": {
+      "file": "mpv-dev-i686-20260814-git-7b8915bc1d.7z",
+      "sha256": "5375b79b392c2eb308a6bee3bc5f2dce3c3cbe6ff7ed417e480e11de99b1cc9c"
+    },
+    "arm64": {
+      "file": "mpv-dev-aarch64-20260814-git-7b8915bc1d.7z",
+      "sha256": "112fe269538cc8331bc7ca2773c1d787f8bde99db520e6e447f1e4692ef80f98"
+    }
+  }
+}
