@@ -1,19 +1,24 @@
+// Screenbox.VideoView — mpv 渲染宿主控件（SPEC §6.4）。
+// 复用现状基建：自建 D3D11 device + CreateSwapChainForComposition（B8G8R8A8、
+// FlipSequential、Scaling.Stretch、MaxFrameLatency=1）+ ISwapChainPanelNative.SetSwapChain
+// + CompositionScale 逆矩阵。相对 VLC 时代的变化（SPEC §5.2 / info.md §3）：
+// - 删除 MediaPlayer DP 与 --winrt-d3dcontext/--winrt-swapchain 句柄选项协议；
+// - 删除 private-data GUID 尺寸协议（f1b59347…/6ea976a0…），mpv 模式 FBO 尺寸即渲染尺寸，
+//   SizeChanged 必须走 ResizeBuffers（由 MpvRenderHost 在渲染线程串行执行）；
+// - Initialized 事件退化为无参时序信号（swapchain 就绪）；
+// - 新增 PlayerHandle DP（Screenbox.Mpv.MpvHandle），句柄到位即启动 MpvRenderHost。
+
 using System;
-using LibVLCSharp.Shared;
+using Screenbox.Mpv;
 using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
 using Silk.NET.Direct3D11;
 using Silk.NET.DXGI;
+using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace Screenbox.Controls;
-
-public sealed class VideoViewInitializedEventArgs : EventArgs
-{
-    public string[] SwapChainOptions { get; }
-    public VideoViewInitializedEventArgs(string[] swapChainOptions) => SwapChainOptions = swapChainOptions;
-}
 
 public unsafe partial class VideoView : SwapChainPanel
 {
@@ -24,25 +29,35 @@ public unsafe partial class VideoView : SwapChainPanel
     private ComPtr<ID3D11DeviceContext> _d3d11Context;
     private ComPtr<IDXGISwapChain1> _swapChain;
 
+    private readonly DispatcherQueue _dispatcherQueue;
+    private MpvRenderHost? _renderHost;
     private bool _loaded;
-    private static readonly Guid SWAPCHAIN_WIDTH = new("f1b59347-1643-411a-ad6b-c780177a06b6");
-    private static readonly Guid SWAPCHAIN_HEIGHT = new("6ea976a0-9d60-4bb7-a5a9-7dd1187fc9bd");
 
-    public event EventHandler<VideoViewInitializedEventArgs>? Initialized;
+    /// <summary>swapchain 就绪的时序信号（SPEC：参数清空，不再携带任何选项）。</summary>
+    public event EventHandler? Initialized;
 
-    public static readonly DependencyProperty MediaPlayerProperty = DependencyProperty.Register(
-        nameof(MediaPlayer), typeof(MediaPlayer), typeof(VideoView), new PropertyMetadata(null));
+    /// <summary>渲染层非设备丢失类失败（双后端均不可用等）。已在 UI 线程封送。</summary>
+    public event EventHandler<Exception>? RenderFailed;
 
-    public MediaPlayer? MediaPlayer
+    public static readonly DependencyProperty PlayerHandleProperty = DependencyProperty.Register(
+        nameof(PlayerHandle), typeof(MpvHandle), typeof(VideoView),
+        new PropertyMetadata(null, OnPlayerHandleChanged));
+
+    /// <summary>mpv 客户端句柄。swapchain 就绪且句柄非空时启动渲染宿主；句柄变更触发重建。</summary>
+    public MpvHandle? PlayerHandle
     {
-        get => (MediaPlayer?)GetValue(MediaPlayerProperty);
-        set => SetValue(MediaPlayerProperty, value);
+        get => (MpvHandle?)GetValue(PlayerHandleProperty);
+        set => SetValue(PlayerHandleProperty, value);
     }
+
+    /// <summary>当前渲染后端（诊断用）；渲染宿主未启动时为 null。</summary>
+    public MpvRenderBackendKind? ActiveBackend => _renderHost?.Backend;
 
     public VideoView()
     {
         _d3d11 = new D3D11(new DefaultNativeContext("d3d11"));
         _dxgi = new DXGI(new DefaultNativeContext("dxgi"));
+        _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         SizeChanged += (s, e) =>
         {
@@ -54,6 +69,13 @@ public unsafe partial class VideoView : SwapChainPanel
             if (_loaded) UpdateScale();
         };
         Unloaded += (s, e) => DestroySwapChain();
+    }
+
+    private static void OnPlayerHandleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        VideoView view = (VideoView)d;
+        if (view._loaded)
+            view.StartRenderHost(); // 句柄变更/清空：重建或停止渲染宿主
     }
 
     private void CreateSwapChain()
@@ -125,28 +147,66 @@ public unsafe partial class VideoView : SwapChainPanel
         UpdateScale();
         UpdateSize();
 
-        // Expose SwapChain options for LibVLC
-        var options = new[]
-        {
-            $"--winrt-d3dcontext=0x{(IntPtr)_d3d11Context.Handle:x}",
-            $"--winrt-swapchain=0x{(IntPtr)_swapChain.Handle:x}"
-        };
-
-        Initialized?.Invoke(this, new VideoViewInitializedEventArgs(options));
+        Initialized?.Invoke(this, EventArgs.Empty);
+        StartRenderHost();
     }
 
+    /// <summary>swapchain 就绪且 PlayerHandle 非空时启动渲染宿主；句柄为 null 则仅停止。</summary>
+    private void StartRenderHost()
+    {
+        StopRenderHost();
+        if (!_loaded || _swapChain.Handle == null || PlayerHandle == null)
+            return;
+
+        MpvRenderHost host = new(PlayerHandle, _d3d11Device.Handle, _d3d11Context.Handle, _swapChain.Handle);
+        host.DeviceLost += OnRenderDeviceLost;
+        host.RenderFailed += OnRenderFailed;
+        _renderHost = host;
+    }
+
+    private void StopRenderHost()
+    {
+        if (_renderHost == null)
+            return;
+
+        _renderHost.DeviceLost -= OnRenderDeviceLost;
+        _renderHost.RenderFailed -= OnRenderFailed;
+        _renderHost.Dispose(); // Join 渲染线程；mpv_render_context_free 在渲染线程完成
+        _renderHost = null;
+    }
+
+    /// <summary>渲染失败上报：渲染线程回调，封送回 UI 线程转发给订阅方。</summary>
+    private void OnRenderFailed(Exception ex)
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (_loaded)
+                RenderFailed?.Invoke(this, ex);
+        });
+    }
+
+    /// <summary>设备丢失重建：渲染线程已退出，回 UI 线程整体重建 device/swapchain/渲染宿主。</summary>
+    private void OnRenderDeviceLost()
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_loaded)
+                return;
+            CreateSwapChain(); // 内部先 DestroySwapChain（含 StopRenderHost）再全量重建
+        });
+    }
+
+    /// <summary>
+    /// mpv 模式下 FBO 尺寸即渲染尺寸：SizeChanged → 渲染线程内 ResizeBuffers +
+    /// 渲染目标重建 + 强制重绘（SPEC §D3 关键机制修正）。
+    /// </summary>
     private void UpdateSize()
     {
         if (!_loaded || _swapChain.Handle == null) return;
 
         int w = (int)(ActualWidth * CompositionScaleX);
         int h = (int)(ActualHeight * CompositionScaleY);
-
-        Guid widthGuid = SWAPCHAIN_WIDTH;
-        Guid heightGuid = SWAPCHAIN_HEIGHT;
-
-        _swapChain.SetPrivateData(&widthGuid, sizeof(int), &w);
-        _swapChain.SetPrivateData(&heightGuid, sizeof(int), &h);
+        _renderHost?.Resize(w, h);
     }
 
     private void UpdateScale()
@@ -167,6 +227,9 @@ public unsafe partial class VideoView : SwapChainPanel
 
     private void DestroySwapChain()
     {
+        // 顺序硬约束：先停渲染宿主（线程退出后无人再碰 D3D 对象），再拆 swapchain/设备。
+        StopRenderHost();
+
         if (_loaded)
         {
             try
