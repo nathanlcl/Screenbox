@@ -1,74 +1,45 @@
-using LibVLCSharp.Shared;
-using Windows.Media.Core;
-using Windows.Media.Playback;
+using System.Collections.Generic;
+using Screenbox.Mpv;
 
 namespace Screenbox.Core.Playback;
 
 public sealed partial class PlaybackVideoTrackList : SingleSelectTrackList<VideoTrack>
 {
-    private readonly Media? _media;
-    private readonly MediaPlaybackVideoTrackList? _source;
-
-    public PlaybackVideoTrackList(Media media)
+    internal PlaybackVideoTrackList()
     {
-        _media = media;
-        if (_media.Tracks.Length > 0)
-        {
-            AddVlcMediaTracks(_media.Tracks);
-        }
-        else
-        {
-            _media.ParsedChanged += Media_ParsedChanged;
-        }
-
-        SelectedIndex = 0;
     }
 
-    public PlaybackVideoTrackList(MediaPlaybackVideoTrackList source)
+    /// <summary>
+    /// Rebuilds the list from an mpv <c>track-list</c> snapshot. Selection follows the
+    /// track with <c>selected=true</c>; falls back to the previously selected track id,
+    /// then to the first track.
+    /// </summary>
+    internal void Populate(IReadOnlyList<MpvNodeValue> trackList)
     {
-        _source = source;
-        SelectedIndex = source.SelectedIndex;
-        source.SelectedIndexChanged += (sender, args) => SelectedIndex = sender.SelectedIndex;
-        foreach (Windows.Media.Core.VideoTrack videoTrack in source)
-        {
-            TrackList.Add(new VideoTrack(videoTrack));
-        }
-
-        SelectedIndexChanged += OnSelectedIndexChanged;
-    }
-
-    public void Refresh()
-    {
-        if (_source == null) return;
+        long? previousId = SelectedIndex >= 0 && SelectedIndex < Count ? this[SelectedIndex].MpvTrackId : null;
         TrackList.Clear();
-        foreach (Windows.Media.Core.VideoTrack videoTrack in _source)
+        long selectedId = -1;
+        foreach (MpvNodeValue node in trackList)
         {
-            TrackList.Add(new VideoTrack(videoTrack));
+            if (node.Kind != MpvNodeKind.Map || MediaTrack.GetTrackType(node.AsMap) != "video") continue;
+            VideoTrack track = new(node);
+            if (track.MpvSelected) selectedId = track.MpvTrackId;
+            TrackList.Add(track);
         }
+
+        int selected = FindIndexById(selectedId);
+        if (selected < 0 && previousId.HasValue) selected = FindIndexById(previousId.Value);
+        if (selected < 0) selected = Count > 0 ? 0 : -1;
+        SelectedIndex = selected;
     }
 
-    private void OnSelectedIndexChanged(ISingleSelectMediaTrackList sender, object? args)
+    private int FindIndexById(long mpvTrackId)
     {
-        // Only update for Windows track list. VLC track list is handled by the player.
-        if (_source == null || _source.SelectedIndex == sender.SelectedIndex) return;
-        _source.SelectedIndex = sender.SelectedIndex;
-    }
-
-    private void Media_ParsedChanged(object? sender, MediaParsedChangedEventArgs e)
-    {
-        if (_media == null || e.ParsedStatus != MediaParsedStatus.Done) return;
-        _media.ParsedChanged -= Media_ParsedChanged;
-        AddVlcMediaTracks(_media.Tracks);
-    }
-
-    private void AddVlcMediaTracks(LibVLCSharp.Shared.MediaTrack[] tracks)
-    {
-        foreach (LibVLCSharp.Shared.MediaTrack track in tracks)
+        for (int i = 0; i < TrackList.Count; i++)
         {
-            if (track.TrackType == TrackType.Video)
-            {
-                TrackList.Add(new VideoTrack(track));
-            }
+            if (TrackList[i].MpvTrackId == mpvTrackId) return i;
         }
+
+        return -1;
     }
 }

@@ -7,6 +7,12 @@ namespace Screenbox.Core.Services;
 public interface ICastService
 {
     /// <summary>
+    /// Whether casting is supported by the current playback kernel.
+    /// When <see langword="false"/>, UI should hide the cast entry point (SPEC §D6).
+    /// </summary>
+    bool IsSupported { get; }
+
+    /// <summary>
     /// Create a new renderer watcher for the specified media player
     /// </summary>
     RendererWatcher CreateRendererWatcher(IMediaPlayer player);

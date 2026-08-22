@@ -1,11 +1,12 @@
 using System;
-using LibVLCSharp.Shared;
+using System.Collections.Generic;
+using Screenbox.Mpv;
 
 namespace Screenbox.Core.Playback;
 
 public class PlaybackItem
 {
-    internal Media Media { get; }
+    internal PlaybackSource Source { get; }
 
     public object OriginalSource { get; }
 
@@ -19,18 +20,30 @@ public class PlaybackItem
 
     public PlaybackChapterList Chapters { get; }
 
-    public TimeSpan StartTime { get; set; }
+    /// <summary>
+    /// Media duration. Backfilled by <see cref="MpvMediaPlayer"/> once mpv reports the
+    /// <c>duration</c> property (or by the metadata probe / Windows API paths).
+    /// </summary>
+    public TimeSpan? Duration { get; internal set; }
 
-    public TimeSpan? Duration => Media.Duration > 0 ? TimeSpan.FromMilliseconds(Media.Duration) : null;
-
-    internal PlaybackItem(object source, Media media)
+    internal PlaybackItem(object source, PlaybackSource playbackSource)
     {
         OriginalSource = source;
-        Media = media;
-        AudioTracks = new PlaybackAudioTrackList(media);
-        VideoTracks = new PlaybackVideoTrackList(media);
-        SubtitleTracks = new PlaybackSubtitleTrackList(media);
+        Source = playbackSource;
+        AudioTracks = new PlaybackAudioTrackList();
+        VideoTracks = new PlaybackVideoTrackList();
+        SubtitleTracks = new PlaybackSubtitleTrackList();
         Chapters = new PlaybackChapterList(this);
-        StartTime = TimeSpan.Zero;
+    }
+
+    /// <summary>
+    /// Populates the track lists from an mpv <c>track-list</c> node snapshot
+    /// (invoked by <see cref="MpvMediaPlayer"/> on file load and on track-list changes).
+    /// </summary>
+    internal void PopulateTracks(IReadOnlyList<MpvNodeValue> trackList)
+    {
+        AudioTracks.Populate(trackList);
+        VideoTracks.Populate(trackList);
+        SubtitleTracks.Populate(trackList);
     }
 }
