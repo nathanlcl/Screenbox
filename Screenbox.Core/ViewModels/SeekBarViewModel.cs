@@ -90,6 +90,7 @@ public sealed partial class SeekBarViewModel :
             MediaPlayer.NaturalDurationChanged += OnNaturalDurationChanged;
             MediaPlayer.PositionChanged += OnPositionChanged;
             MediaPlayer.ChapterChanged += OnChapterChanged;
+            MediaPlayer.ChapterListChanged += OnChapterListChanged;
             MediaPlayer.MediaEnded += OnEndReached;
             MediaPlayer.BufferingStarted += OnBufferingStarted;
             MediaPlayer.BufferingEnded += OnBufferingEnded;
@@ -138,6 +139,7 @@ public sealed partial class SeekBarViewModel :
             oldPlayer.NaturalDurationChanged -= OnNaturalDurationChanged;
             oldPlayer.PositionChanged -= OnPositionChanged;
             oldPlayer.ChapterChanged -= OnChapterChanged;
+            oldPlayer.ChapterListChanged -= OnChapterListChanged;
             oldPlayer.MediaEnded -= OnEndReached;
             oldPlayer.BufferingStarted -= OnBufferingStarted;
             oldPlayer.BufferingEnded -= OnBufferingEnded;
@@ -151,6 +153,7 @@ public sealed partial class SeekBarViewModel :
             MediaPlayer.NaturalDurationChanged += OnNaturalDurationChanged;
             MediaPlayer.PositionChanged += OnPositionChanged;
             MediaPlayer.ChapterChanged += OnChapterChanged;
+            MediaPlayer.ChapterListChanged += OnChapterListChanged;
             MediaPlayer.MediaEnded += OnEndReached;
             MediaPlayer.BufferingStarted += OnBufferingStarted;
             MediaPlayer.BufferingEnded += OnBufferingEnded;
@@ -381,6 +384,12 @@ public sealed partial class SeekBarViewModel :
         {
             Time = sender.Position.TotalMilliseconds;
         });
+    }
+
+    private void OnChapterListChanged(object? sender, EventArgs e)
+    {
+        if (sender is not IMediaPlayer player) return;
+        _dispatcherQueue.TryEnqueue(() => UpdateChapters(player.PlaybackItem?.Chapters));
     }
 
     private void OnChapterChanged(IMediaPlayer sender, ValueChangedEventArgs<ChapterCue?> args)
