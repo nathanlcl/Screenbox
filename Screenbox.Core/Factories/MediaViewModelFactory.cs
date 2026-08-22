@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using LibVLCSharp.Shared;
 using Screenbox.Core.Contexts;
-using Screenbox.Core.Playback;
 using Screenbox.Core.Services;
 using Screenbox.Core.ViewModels;
 using Windows.Storage;
@@ -42,20 +40,19 @@ public sealed class MediaViewModelFactory
 
     /// <summary>
     /// Always creates a new <see cref="MediaViewModel"/> without any lookup.
+    /// Used for playlist sub-items expanded by the mpv probe instance (SPEC §D5).
     /// </summary>
-    public MediaViewModel Create(Media media)
+    /// <param name="uri">Absolute URI of the media source.</param>
+    /// <param name="title">Optional display title from the playlist entry.</param>
+    /// <returns>A new view model, or <see langword="null"/> when <paramref name="uri"/> is not an absolute URI.</returns>
+    public MediaViewModel? Create(string uri, string? title)
     {
-        if (!Uri.TryCreate(media.Mrl, UriKind.Absolute, out Uri? uri))
-            return new MediaViewModel(_playerContext, _playerService, media);
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out Uri? parsed))
+            return null;
 
-        // Prefer URI source for easier clean up
-        MediaViewModel vm = new(_playerContext, _playerService, uri)
-        {
-            Item = new Lazy<PlaybackItem?>(new PlaybackItem(media, media))
-        };
-
-        if (media.Meta(MetadataType.Title) is { } name && !string.IsNullOrEmpty(name))
-            vm.Name = name;
+        MediaViewModel vm = new(_playerContext, _playerService, parsed);
+        if (!string.IsNullOrEmpty(title))
+            vm.Name = title;
 
         return vm;
     }
