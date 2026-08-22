@@ -267,7 +267,7 @@ ServiceFabricBackup/
 *.ndf
 
 # Business Intelligence projects
-*.rdl.data
+*.rd.data
 *.bim.layout
 *.bim_*.settings
 *.rptproj.rsuser
@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# libmpv native binaries (fetched by scripts/fetch-libmpv.ps1, mirrored in GitHub Releases)
+Screenbox/Native/
