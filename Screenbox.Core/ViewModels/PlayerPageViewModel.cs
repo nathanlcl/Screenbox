@@ -543,8 +543,8 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
 
         double delta = key switch
         {
-            VK_OEM_PERIOD => PlaybackRateStep,  // Shift + . (">" )
-            VK_OEM_COMMA => -PlaybackRateStep,  // Shift + , ("<" )
+            VK_OEM_PERIOD => PlaybackRateStep,  // Shift + . (">")
+            VK_OEM_COMMA => -PlaybackRateStep,  // Shift + , ("<")
             _ => 0.0,
         };
 
@@ -623,8 +623,8 @@ public sealed partial class PlayerPageViewModel : ObservableRecipient,
             VirtualKey.Number2 when modifiers == VirtualKeyModifiers.None => 1.0,
             VirtualKey.Number3 when modifiers == VirtualKeyModifiers.None => 1.5,
             VirtualKey.Number4 when modifiers == VirtualKeyModifiers.None => 0.0,
-            VK_OEM_PLUS when modifiers == VirtualKeyModifiers.Control => 1 + desiredStep,   // Plus  ("+" )
-            VK_OEM_MINUS when modifiers == VirtualKeyModifiers.Control => 1 - desiredStep,  // Minus ("-" )
+            VK_OEM_PLUS when modifiers == VirtualKeyModifiers.Control => 1 + desiredStep,   // Plus  ("+")
+            VK_OEM_MINUS when modifiers == VirtualKeyModifiers.Control => 1 - desiredStep,  // Minus ("-")
             _ => null,
         };
 
