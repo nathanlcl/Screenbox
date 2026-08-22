@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using CommunityToolkit.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
-using LibVLCSharp.Shared;
 using Screenbox.Core.Contexts;
 using Screenbox.Core.Enums;
 using Screenbox.Core.Helpers;
@@ -88,6 +87,7 @@ public sealed partial class MediaViewModel : ObservableRecipient
     public partial bool IsPlaying { get; set; }
 
     private WeakReference<BitmapImage>? _thumbnailRef;
+    private Task<MpvProbeResult?>? _probeTask;  // 远程 URI 源的元数据探测（备忘复用）
 
     public MediaViewModel(MediaViewModel source)
     {
@@ -141,15 +141,6 @@ public sealed partial class MediaViewModel : ObservableRecipient
         Name = uri.Segments.Length > 0 ? Uri.UnescapeDataString(uri.Segments.Last()) : string.Empty;
     }
 
-    public MediaViewModel(PlayerContext playerContext, IPlayerService playerService, Media media)
-        : this(media, new MediaInfo(MediaPlaybackType.Unknown), playerContext, playerService)
-    {
-        Location = media.Mrl;
-
-        // Media is already loaded, create PlaybackItem
-        Item = new Lazy<PlaybackItem?>(new PlaybackItem(media, media));
-    }
-
     partial void OnMediaInfoChanged(MediaInfo value)
     {
         UpdateCaptions();
@@ -166,14 +157,7 @@ public sealed partial class MediaViewModel : ObservableRecipient
         PlaybackItem? item = null;
         try
         {
-            if (Source is Media mediaSource)
-            {
-                item = new PlaybackItem(mediaSource, mediaSource);
-            }
-            else
-            {
-                item = _playerService.CreatePlaybackItem(MediaPlayer, Source, _options.ToArray());
-            }
+            item = _playerService.CreatePlaybackItem(MediaPlayer, Source, _options.ToArray());
         }
         catch (ArgumentOutOfRangeException)
         {
@@ -195,8 +179,9 @@ public sealed partial class MediaViewModel : ObservableRecipient
 
     public void SetOptions(string options)
     {
+        // mpv 选项语法：--k=v（SPEC §6.3）
         string[] opts = options.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(o => o.StartsWith(":") && o.Length > 1).ToArray();
+            .Where(o => o.StartsWith("--") && o.Length > 2).ToArray();
 
         // Check if new options and existing options are the same
         if (opts.Length == _options.Count)
@@ -214,8 +199,7 @@ public sealed partial class MediaViewModel : ObservableRecipient
 
     public void Clean()
     {
-        // If source is Media then there is no way to recreate. Don't clean up.
-        if (Source is Media || !Item.IsValueCreated) return;
+        if (!Item.IsValueCreated) return;
         PlaybackItem? item = Item.Value;
         Item = new Lazy<PlaybackItem?>(CreatePlaybackItem);
         if (item == null) return;
@@ -240,15 +224,15 @@ public sealed partial class MediaViewModel : ObservableRecipient
                 UpdateSource(uriFile);
                 MediaInfo = await filesService.GetMediaInfoAsync(uriFile);
                 break;
+            case Uri remoteUri:
+                // 远程 URI 源：用 mpv 探测实例取元数据（SPEC §D5）
+                if (await ProbeSourceAsync(remoteUri) is { } probe)
+                    ApplyProbeResult(probe);
+                break;
         }
 
         switch (MediaType)
         {
-            case MediaPlaybackType.Unknown when Item is { IsValueCreated: true, Value: { VideoTracks.Count: 0, Media.ParsedStatus: MediaParsedStatus.Done } }:
-                // Update media type when it was previously set Unknown. Usually when source is a URI.
-                // We don't want to init PlaybackItem just for this.
-                MediaInfo.MediaType = MediaPlaybackType.Music;
-                break;
             case MediaPlaybackType.Music when !string.IsNullOrEmpty(MediaInfo.MusicProperties.Title):
                 Name = MediaInfo.MusicProperties.Title;
                 break;
@@ -257,24 +241,53 @@ public sealed partial class MediaViewModel : ObservableRecipient
                 break;
         }
 
-        if (Item is { IsValueCreated: true, Value.Media: { IsParsed: true } media })
-        {
-            if (Source is not IStorageItem &&
-                media.Meta(MetadataType.Title) is { } title &&
-                !string.IsNullOrEmpty(title) &&
-                !Guid.TryParse(title, out Guid _))
-            {
-                Name = title;
-            }
-
-            VideoInfo videoProperties = MediaInfo.VideoProperties;
-            videoProperties.ShowName = media.Meta(MetadataType.ShowName) ?? videoProperties.ShowName;
-            videoProperties.Season = media.Meta(MetadataType.Season) ?? videoProperties.Season;
-            videoProperties.Episode = media.Meta(MetadataType.Episode) ?? videoProperties.Episode;
-        }
-
         if (Name == AltCaption)
             AltCaption = string.Empty;
+    }
+
+    /// <summary>
+    /// Applies mpv probe metadata to this view model (SPEC §D5 元数据键映射表).
+    /// 探测失败/超时时不调用本方法，保持文件名兜底展示。
+    /// </summary>
+    private void ApplyProbeResult(MpvProbeResult probe)
+    {
+        // 类型推断：无（非封面）视频轨 → Music。替代原 ParsedStatus + VideoTracks.Count 判断。
+        if (MediaType == MediaPlaybackType.Unknown && !probe.HasVideoStream)
+            MediaInfo.MediaType = MediaPlaybackType.Music;
+
+        if (probe.Title is { } title &&
+            !string.IsNullOrEmpty(title) &&
+            !Guid.TryParse(title, out Guid _))
+        {
+            Name = title;
+        }
+
+        VideoInfo videoProperties = MediaInfo.VideoProperties;
+        videoProperties.ShowName = probe.ShowName ?? videoProperties.ShowName;
+        videoProperties.Season = probe.Season ?? videoProperties.Season;
+        videoProperties.Episode = probe.Episode ?? videoProperties.Episode;
+
+        // 写入 MusicInfo 后由 UpdateCaptions 统一生成 Caption/AltCaption
+        MusicInfo musicProperties = MediaInfo.MusicProperties;
+        musicProperties.Artist = probe.Artist ?? musicProperties.Artist;
+        musicProperties.Album = probe.Album ?? musicProperties.Album;
+
+        if (probe.Duration is { } duration && Duration <= TimeSpan.Zero)
+        {
+            musicProperties.Duration = duration;
+            videoProperties.Duration = duration;
+        }
+
+        UpdateCaptions();
+    }
+
+    /// <summary>
+    /// Probes a remote URI source with the shared mpv probe instance. The probe task is
+    /// memoized so repeated detail/caption loads reuse the same result.
+    /// </summary>
+    private Task<MpvProbeResult?> ProbeSourceAsync(Uri uri)
+    {
+        return _probeTask ??= MpvMediaProbe.Shared.ProbeAsync(uri);
     }
 
     public async Task LoadThumbnailAsync()
@@ -307,16 +320,8 @@ public sealed partial class MediaViewModel : ObservableRecipient
 
             Thumbnail = image;
         }
-        else if (Item is { IsValueCreated: true, Value.Media: { } media } &&
-                 media.Meta(MetadataType.ArtworkURL) is { } artworkUrl &&
-                 Uri.TryCreate(artworkUrl, UriKind.Absolute, out Uri? artworkUri))
-        {
-            Thumbnail = new BitmapImage(artworkUri)
-            {
-                DecodePixelType = DecodePixelType.Logical,
-                DecodePixelHeight = 300
-            };
-        }
+
+        // 远程 URI 源无缩略图：mpv metadata 无封面 URL（SPEC §D5 ArtworkURL 降级为 null）
     }
 
     public Task<IRandomAccessStream?> GetThumbnailSourceAsync()
@@ -372,20 +377,6 @@ public sealed partial class MediaViewModel : ObservableRecipient
         else if (!string.IsNullOrEmpty(musicProperties.Album))
         {
             AltCaption = musicProperties.Album;
-        }
-
-        if (Item is { IsValueCreated: true, Value.Media: { IsParsed: true } media })
-        {
-            string artist = media.Meta(MetadataType.Artist) ?? string.Empty;
-            if (!string.IsNullOrEmpty(artist))
-            {
-                Caption = artist;
-            }
-
-            if (media.Meta(MetadataType.Album) is { } album && !string.IsNullOrEmpty(album))
-            {
-                AltCaption = string.IsNullOrEmpty(artist) ? album : $"{artist} – {album}";
-            }
         }
     }
 
