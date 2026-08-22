@@ -1,6 +1,7 @@
 using System;
-using LibVLCSharp.Shared;
+using System.Collections.Generic;
 using Screenbox.Core.Helpers;
+using Screenbox.Mpv;
 using Windows.Globalization;
 using Windows.Media.Core;
 
@@ -21,6 +22,15 @@ public abstract partial class MediaTrack : IMediaTrack
 
     public MediaTrackKind TrackKind { get; }
 
+    /// <summary>mpv <c>track-list/N/id</c>。懒加载占位轨为 -1，加载后回填。</summary>
+    internal long MpvTrackId { get; set; } = -1;
+
+    /// <summary>mpv <c>track-list/N/selected</c>（该轨当前是否被选中）。</summary>
+    internal bool MpvSelected { get; }
+
+    /// <summary>mpv <c>track-list/N/title</c>。</summary>
+    protected string? TrackTitle { get; }
+
     internal MediaTrack(MediaTrackKind trackKind, string language = "")
     {
         TrackKind = trackKind;
@@ -29,10 +39,22 @@ public abstract partial class MediaTrack : IMediaTrack
         Label = string.Empty;
     }
 
-    protected MediaTrack(LibVLCSharp.Shared.MediaTrack track)
+    /// <summary>
+    /// Creates a track from an mpv <c>track-list</c> node
+    /// (keys: <c>id</c>, <c>type</c>, <c>title</c>, <c>lang</c>, <c>selected</c>, <c>external</c>).
+    /// </summary>
+    protected MediaTrack(MpvNodeValue trackNode)
     {
-        TrackKind = Convert(track.TrackType);
-        _languageStr = track.Language ?? string.Empty;
+        IReadOnlyDictionary<string, MpvNodeValue> map = trackNode.AsMap;
+        TrackKind = GetString(map, "type") switch
+        {
+            "audio" => MediaTrackKind.Audio,
+            "video" => MediaTrackKind.Video,
+            "sub" => MediaTrackKind.TimedMetadata,
+            var type => throw new ArgumentException($"Unknown mpv track type '{type}'.", nameof(trackNode))
+        };
+
+        _languageStr = GetString(map, "lang") ?? string.Empty;
         if (Windows.Globalization.Language.IsWellFormed(_languageStr))
         {
             if (LanguageHelper.TryConvertISO6392ToISO6391(_languageStr, out string bc47Tag))
@@ -40,21 +62,34 @@ public abstract partial class MediaTrack : IMediaTrack
             _language = new Language(_languageStr);
         }
 
-        Id = track.Id.ToString();
-        Label = GetFullLabel(track.Description, Language);
+        MpvTrackId = GetInt64(map, "id") ?? -1;
+        Id = MpvTrackId.ToString();
+        MpvSelected = GetFlag(map, "selected") ?? false;
+        TrackTitle = GetString(map, "title");
+        Label = GetFullLabel(TrackTitle, Language);
     }
 
-    protected MediaTrack(IMediaTrack track)
-    {
-        _languageStr = track.Language;
-        if (Windows.Globalization.Language.IsWellFormed(_languageStr))
-        {
-            _language = new Language(_languageStr);
-        }
+    internal static string? GetString(IReadOnlyDictionary<string, MpvNodeValue> map, string key) =>
+        map.TryGetValue(key, out MpvNodeValue? value) && value.Kind == MpvNodeKind.String
+            ? value.AsString
+            : null;
 
-        Id = track.Id;
-        Label = GetFullLabel(track.Label, Language);
-    }
+    internal static long? GetInt64(IReadOnlyDictionary<string, MpvNodeValue> map, string key) =>
+        map.TryGetValue(key, out MpvNodeValue? value) && value.Kind == MpvNodeKind.Int64
+            ? value.AsInt64
+            : null;
+
+    internal static double? GetDouble(IReadOnlyDictionary<string, MpvNodeValue> map, string key) =>
+        map.TryGetValue(key, out MpvNodeValue? value) && value.Kind == MpvNodeKind.Double
+            ? value.AsDouble
+            : null;
+
+    internal static bool? GetFlag(IReadOnlyDictionary<string, MpvNodeValue> map, string key) =>
+        map.TryGetValue(key, out MpvNodeValue? value) && value.Kind == MpvNodeKind.Flag
+            ? value.AsBoolean
+            : null;
+
+    internal static string? GetTrackType(IReadOnlyDictionary<string, MpvNodeValue> map) => GetString(map, "type");
 
     private static string GetFullLabel(string? label, string language)
     {
@@ -68,16 +103,5 @@ public abstract partial class MediaTrack : IMediaTrack
         }
 
         return label ?? string.Empty;
-    }
-
-    private static MediaTrackKind Convert(TrackType trackType)
-    {
-        return trackType switch
-        {
-            TrackType.Audio => MediaTrackKind.Audio,
-            TrackType.Video => MediaTrackKind.Video,
-            TrackType.Text => MediaTrackKind.TimedMetadata,
-            _ => throw new ArgumentOutOfRangeException(nameof(trackType), trackType, null)
-        };
     }
 }

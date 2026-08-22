@@ -24,8 +24,13 @@ public interface IMediaPlayer
     event TypedEventHandler<IMediaPlayer, EventArgs>? CanSeekChanged;
     event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<TimeSpan>>? PositionChanged;
     event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<ChapterCue?>>? ChapterChanged;
+
+    /// <summary>Raised when the chapter list of the current playback item changes (e.g. mpv <c>chapter-list</c> update).</summary>
+    event EventHandler? ChapterListChanged;
     event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<MediaPlaybackState>>? PlaybackStateChanged;
     event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<double>>? PlaybackRateChanged;
+    event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<double>>? SubtitleDelayChanged;
+    event TypedEventHandler<IMediaPlayer, ValueChangedEventArgs<double>>? AudioDelayChanged;
 
     bool CanPause { get; }
     bool CanSeek { get; }
@@ -40,6 +45,12 @@ public interface IMediaPlayer
     TimeSpan NaturalDuration { get; }
     ChapterCue? Chapter { get; }
     double PlaybackRate { get; set; }
+
+    /// <summary>Subtitle timing offset in milliseconds.</summary>
+    double SubtitleDelay { get; set; }
+
+    /// <summary>Audio timing offset in milliseconds.</summary>
+    double AudioDelay { get; set; }
     Rect NormalizedSourceRect { get; set; }
     double Volume { get; set; }
     public PlaybackItem? PlaybackItem { get; set; }
@@ -50,4 +61,10 @@ public interface IMediaPlayer
     void StepForwardOneFrame();
     void StepBackwardOneFrame();
     void AddSubtitle(IStorageFile file, bool select = true);
+
+    /// <summary>
+    /// Saves a snapshot of the current video frame to <paramref name="filePath"/>.
+    /// Throws on failure or timeout.
+    /// </summary>
+    void SaveSnapshot(string filePath);
 }
