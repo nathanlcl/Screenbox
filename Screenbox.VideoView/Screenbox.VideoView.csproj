@@ -13,8 +13,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LibVLCSharp.UWP" Version="3.10.1" />
     <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" />
     <PackageReference Include="Silk.NET.Direct3D11" Version="2.23.0" />
+  </ItemGroup>
+
+  <!-- SPEC §D7：VLC 包已移除，渲染宿主改为引用 libmpv 绑定层 -->
+  <ItemGroup>
+    <ProjectReference Include="..\Screenbox.Mpv\Screenbox.Mpv.csproj" />
   </ItemGroup>
 </Project>
