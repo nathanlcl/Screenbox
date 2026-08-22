@@ -759,10 +759,10 @@
   <data name="SetPlaybackOptionsHelpTextLine2" xml:space="preserve">
     <value>部分選項僅能套用至所有播放模式。</value>
   </data>
-  <data name="VlcCommandLineHelpLink" xml:space="preserve">
+  <data name="MpvCommandLineHelpLink" xml:space="preserve">
     <value>VLC 命令列說明</value>
   </data>
-  <data name="VlcCommandLineHelpText" xml:space="preserve">
+  <data name="MpvCommandLineHelpText" xml:space="preserve">
     <value>請參閱 {0} 查看所有可用選項。</value>
     <comment>{0} = VLC command-line help</comment>
   </data>
