@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using LibVLCSharp.Shared;
 using Screenbox.Core.Helpers;
 using Screenbox.Core.Models;
 using Screenbox.Core.ViewModels;
@@ -37,7 +36,7 @@ public sealed class MediaListFactory : IMediaListFactory
             switch (item)
             {
                 case StorageFile m3uFile when IsM3uPlaylist(m3uFile.FileType):
-                    // Parse M3U/M3U8 playlists directly without creating a LibVLC Media object.
+                    // Parse M3U/M3U8 playlists directly with the built-in parser.
                     var m3uItems = await ParseM3uAsync(m3uFile, cancellationToken);
                     if (m3uItems.Count > 0)
                     {
@@ -73,7 +72,7 @@ public sealed class MediaListFactory : IMediaListFactory
 
     public async Task<NextMediaList> ParseMediaListAsync(MediaViewModel media, CancellationToken cancellationToken = default)
     {
-        // Handle M3U/M3U8 sources directly without going through LibVLC media parsing.
+        // Handle M3U/M3U8 sources directly with the built-in parser.
         var m3uFile = await TryGetM3uStorageFileAsync(media.Source);
         if (m3uFile is not null)
         {
@@ -82,11 +81,9 @@ public sealed class MediaListFactory : IMediaListFactory
                 return new NextMediaList(m3uItems[0], m3uItems);
         }
 
-        // The ordering of the conditional terms below is important
-        // Delay check Item as much as possible. Item is lazy init.
+        // 非播放列表源不展开；播放列表源（.ts/.m3u 等，m3u 已在上面拦截）走 mpv 探测实例展开。
         if ((media.Source is StorageFile file && !file.IsSupportedPlaylist())
             || (media.Source is Uri uri && !IsUriLocalPlaylistFile(uri))
-            || media.Item.Value?.Media is { ParsedStatus: MediaParsedStatus.Done or MediaParsedStatus.Failed, SubItems.Count: 0 }
             || await ParseSubMediaRecursiveAsync(media, cancellationToken) is not { Count: > 0 } playlist)
         {
             return new NextMediaList(media);
@@ -99,7 +96,7 @@ public sealed class MediaListFactory : IMediaListFactory
     {
         if (IsM3uPlaylist(file.FileType))
         {
-            // Parse M3U/M3U8 playlists directly without creating a LibVLC Media object.
+            // Parse M3U/M3U8 playlists directly with the built-in parser.
             var m3uItems = await ParseM3uAsync(file, cancellationToken);
             if (m3uItems.Count > 0)
                 return new NextMediaList(m3uItems[0], m3uItems);
@@ -119,7 +116,7 @@ public sealed class MediaListFactory : IMediaListFactory
     {
         if (IsUriLocalM3uFile(uri))
         {
-            // Convert local M3U/M3U8 URIs to StorageFile and parse directly without LibVLC.
+            // Convert local M3U/M3U8 URIs to StorageFile and parse directly.
             var file = await FilesHelpers.TryGetFileFromPathAsync(uri.LocalPath);
             if (file is not null)
             {
@@ -156,7 +153,7 @@ public sealed class MediaListFactory : IMediaListFactory
     }
 
     /// <summary>
-    /// Parses an M3U or M3U8 playlist file directly, without invoking LibVLC media parsing.
+    /// Parses an M3U or M3U8 playlist file directly, without invoking mpv probing.
     /// Each non-comment, non-empty line is resolved as either an absolute URI or a path
     /// (absolute or relative to the playlist file's directory) and wrapped in a
     /// <see cref="MediaViewModel"/>. <c>#EXTINF</c> directives are parsed to pre-populate
@@ -321,26 +318,86 @@ public sealed class MediaListFactory : IMediaListFactory
         }
     }
 
+    /// <summary>
+    /// Parses sub-items of a playlist source using the mpv probe instance (SPEC §D5).
+    /// mpv natively expands .pls/.xspf/.m3u-style playlists into a <c>playlist</c> array;
+    /// regular media files report a playlist containing only themselves (1 entry) and
+    /// are not treated as playlists here.
+    /// </summary>
     private async Task<List<MediaViewModel>> ParseSubMediaAsync(MediaViewModel source, CancellationToken cancellationToken = default)
     {
-        if (source.Item.Value == null) return new List<MediaViewModel>();
-
+        MpvProbeResult? probe;
         try
         {
-            var media = source.Item.Value.Media;
-            if (!media.IsParsed || media.ParsedStatus is MediaParsedStatus.Skipped)
+            probe = source.Source switch
             {
-                await media.ParseAsync(TimeSpan.FromSeconds(10), cancellationToken);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var subItems = media.SubItems.Select(item => _mediaFactory.Create(item));
-            return subItems.ToList();
+                StorageFile file => await MpvMediaProbe.Shared.ProbeAsync(file, cancellationToken),
+                Uri uri => await MpvMediaProbe.Shared.ProbeAsync(uri, cancellationToken),
+                _ => null
+            };
         }
         catch (OperationCanceledException)
         {
             return new List<MediaViewModel>();
+        }
+
+        if (probe?.Playlist is not { Count: > 1 } entries)
+            return new List<MediaViewModel>();
+
+        var items = new List<MediaViewModel>(entries.Count);
+        foreach (MpvPlaylistEntry entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await CreateEntryViewModelAsync(source, entry) is { } vm)
+                items.Add(vm);
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="MediaViewModel"/> for a playlist entry probed by mpv.
+    /// Entry filenames may be absolute URIs or paths relative to the playlist source.
+    /// Local entries prefer <see cref="StorageFile"/> view models for richer metadata support.
+    /// </summary>
+    private async Task<MediaViewModel?> CreateEntryViewModelAsync(MediaViewModel source, MpvPlaylistEntry entry)
+    {
+        try
+        {
+            if (!Uri.TryCreate(entry.FileName, UriKind.Absolute, out Uri? uri))
+            {
+                // Resolve relative paths against the playlist source's directory.
+                string? directoryName = source.Source switch
+                {
+                    StorageFile { Path.Length: > 0 } file => Path.GetDirectoryName(file.Path),
+                    Uri { IsFile: true, IsLoopback: true } sourceUri => Path.GetDirectoryName(sourceUri.LocalPath),
+                    _ => null
+                };
+                if (directoryName == null ||
+                    !Uri.TryCreate(entry.FileName, UriKind.Relative, out Uri? relativeUri))
+                    return null;
+
+                uri = new Uri(new Uri(directoryName, UriKind.Absolute), relativeUri);
+            }
+
+            var localFile = await TryGetLocalFileFromUriAsync(uri);
+            if (localFile != null)
+            {
+                if (_mediaFactory.TryGetOrCreate(localFile, out MediaViewModel? existing))
+                    return existing;
+
+                MediaViewModel created = _mediaFactory.GetOrCreate(localFile);
+                if (!string.IsNullOrEmpty(entry.Title))
+                    created.Name = entry.Title;
+                return created;
+            }
+
+            return _mediaFactory.Create(uri.OriginalString, entry.Title);
+        }
+        catch (Exception)
+        {
+            // Skip entries that cannot be parsed as valid media sources.
+            return null;
         }
     }
 
