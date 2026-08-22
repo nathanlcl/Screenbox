@@ -22,6 +22,9 @@ public sealed partial class CastControlViewModel : ObservableObject
     [ObservableProperty] public partial Renderer? CastingDevice { get; set; }
     [ObservableProperty] public partial bool IsCasting { get; set; }
 
+    /// <summary>Whether casting is available with the current player backend (mpv: not supported).</summary>
+    public bool IsSupported => _castService.IsSupported;
+
     private IMediaPlayer? MediaPlayer => _playerContext.MediaPlayer;
 
     private readonly PlayerContext _playerContext;
@@ -43,7 +46,7 @@ public sealed partial class CastControlViewModel : ObservableObject
 
     public void StartDiscovering()
     {
-        if (IsCasting || MediaPlayer == null) return;
+        if (!_castService.IsSupported || IsCasting || MediaPlayer == null) return;
 
         var watcher = _castService.CreateRendererWatcher(MediaPlayer);
         _castContext.RendererWatcher = watcher;

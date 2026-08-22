@@ -86,7 +86,7 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
     public async void Receive(QueueCurrentItemChangedMessage message)
     {
         _cts?.Cancel();
-        if (MediaPlayer is not VlcMediaPlayer player) return;
+        if (MediaPlayer is not { } player) return;
         if (message.Value is not { Source: StorageFile file, MediaType: MediaPlaybackType.Video } media)
             return;
 
@@ -105,15 +105,20 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
             }
         }
 
-        if (!subtitleInitialized && media.Item.Value is { } playbackItem)
+        if (!subtitleInitialized && MediaPlayer is MpvMediaPlayer mpvPlayer)
         {
             try
             {
                 using var cts = new CancellationTokenSource();
                 _cts = cts;
-                await playbackItem.Media.WaitForParsed(TimeSpan.FromSeconds(5), cts.Token);
+                // 等 mpv track-list 首次填充（VLC WaitForParsed 的对应物）
+                await mpvPlayer.TracksReady.WaitAsync(TimeSpan.FromSeconds(5), cts.Token);
             }
             catch (OperationCanceledException)
+            {
+                // pass
+            }
+            catch (TimeoutException)
             {
                 // pass
             }
@@ -273,7 +278,7 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
     {
         try
         {
-            if (ItemSubtitleTrackList == null || MediaPlayer is not VlcMediaPlayer player) return;
+            if (ItemSubtitleTrackList == null || MediaPlayer is not { } player) return;
             StorageFile? file = await _filesService.PickFileAsync(FilesHelpers.SupportedSubtitleFormats.Add("*").ToArray());
             if (file == null) return;
 
