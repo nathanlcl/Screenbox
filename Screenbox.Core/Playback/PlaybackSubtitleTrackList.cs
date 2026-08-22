@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using LibVLCSharp.Shared;
+using Screenbox.Mpv;
 using Windows.Media.Core;
 using Windows.Storage;
 
@@ -9,7 +9,6 @@ namespace Screenbox.Core.Playback;
 
 public sealed partial class PlaybackSubtitleTrackList : SingleSelectTrackList<SubtitleTrack>
 {
-    private readonly Media _media;
     private readonly List<LazySubtitleTrack> _pendingSubtitleTracks;
 
     private class LazySubtitleTrack
@@ -18,61 +17,122 @@ public sealed partial class PlaybackSubtitleTrackList : SingleSelectTrackList<Su
 
         public StorageFile File { get; }
 
-        public VlcMediaPlayer Player { get; }
+        public IMediaPlayer Player { get; }
 
-        public LazySubtitleTrack(VlcMediaPlayer player, StorageFile file)
+        public LazySubtitleTrack(IMediaPlayer player, StorageFile file)
         {
             Player = player;
             File = file;
             Track = new SubtitleTrack
             {
                 Id = "-1",
-                VlcSpu = -1,
+                MpvTrackId = -1,
                 Label = file.Name,
             };
         }
     }
 
-    private int _delaySpu = -1;
+    private long _delaySid = -1;
+    private bool _hasPopulated;
 
-    public PlaybackSubtitleTrackList(Media media)
+    internal PlaybackSubtitleTrackList()
     {
         _pendingSubtitleTracks = new List<LazySubtitleTrack>();
-        _media = media;
-        if (_media.Tracks.Length > 0)
-        {
-            AddVlcMediaTracks(_media.Tracks);
-        }
-        else
-        {
-            _media.ParsedChanged += Media_ParsedChanged;
-        }
-
         SelectedIndexChanged += OnSelectedIndexChanged;
     }
 
-    internal void SelectVlcSpu(int spu)
+    /// <summary>
+    /// Rebuilds the embedded subtitle tracks from an mpv <c>track-list</c> snapshot,
+    /// keeping lazy (external, not yet loaded) placeholders appended at the end.
+    /// Newly appeared sub track ids after the first populate are used to backfill a
+    /// pending lazy track.
+    /// </summary>
+    internal void Populate(IReadOnlyList<MpvNodeValue> trackList)
     {
-        if (spu < 0)
+        HashSet<long> oldIds = new(TrackList.Select(t => t.MpvTrackId).Where(id => id >= 0));
+        List<long> newIds = new();
+        List<SubtitleTrack> realTracks = new();
+        long selectedSid = -1;
+        foreach (MpvNodeValue node in trackList)
+        {
+            if (node.Kind != MpvNodeKind.Map || MediaTrack.GetTrackType(node.AsMap) != "sub") continue;
+            SubtitleTrack track = new(node);
+            if (track.MpvSelected) selectedSid = track.MpvTrackId;
+            if (track.MpvTrackId >= 0 && !oldIds.Contains(track.MpvTrackId)) newIds.Add(track.MpvTrackId);
+            realTracks.Add(track);
+        }
+
+        // Preserve the currently selected lazy placeholder across the rebuild.
+        SubtitleTrack? selectedLazy = SelectedIndex >= 0 && SelectedIndex < Count &&
+            _pendingSubtitleTracks.FirstOrDefault(x => ReferenceEquals(x.Track, this[SelectedIndex])) is { } selected
+            ? selected.Track
+            : null;
+
+        TrackList.Clear();
+        TrackList.AddRange(realTracks);
+        foreach (LazySubtitleTrack lazy in _pendingSubtitleTracks)
+        {
+            TrackList.Add(lazy.Track);
+        }
+
+        if (_hasPopulated && newIds.Count > 0)
+        {
+            // A sub-add we initiated surfaced in the track list: backfill the first pending
+            // lazy track (preferring the selected one) with the new mpv track id.
+            LazySubtitleTrack? target = _pendingSubtitleTracks.FirstOrDefault(x => x.Track.MpvTrackId == -1 && ReferenceEquals(x.Track, selectedLazy))
+                ?? _pendingSubtitleTracks.FirstOrDefault(x => x.Track.MpvTrackId == -1);
+            if (target != null)
+            {
+                target.Track.MpvTrackId = newIds[0];
+                target.Track.Id = newIds[0].ToString();
+            }
+        }
+
+        _hasPopulated = true;
+
+        if (_delaySid >= 0)
+        {
+            long sid = _delaySid;
+            _delaySid = -1;
+            SelectMpvSid(sid);
+            return;
+        }
+
+        int selectedIndex = selectedSid >= 0 ? FindIndexById(selectedSid) : -1;
+        if (selectedIndex >= 0)
+        {
+            SelectedIndex = selectedIndex;
+        }
+        else if (selectedLazy != null)
+        {
+            SelectedIndex = TrackList.IndexOf(selectedLazy);
+        }
+        else if (SelectedIndex >= Count)
+        {
+            SelectedIndex = -1;
+        }
+    }
+
+    /// <summary>mpv 自动选轨同步（observe sid）。</summary>
+    internal void SelectMpvSid(long sid)
+    {
+        if (sid < 0)
         {
             SelectedIndex = -1;
             return;
         }
 
-        // Spu may be set before tracks are populated. Delay select.
+        // Sid may be set before tracks are populated. Delay select.
         if (Count == 0)
         {
-            _delaySpu = spu;
+            _delaySid = sid;
             return;
         }
 
-        for (int i = 0; i < Count; i++)
+        int index = FindIndexById(sid);
+        if (index >= 0)
         {
-            if (this[i].VlcSpu == spu)
-            {
-                SelectedIndex = i;
-                break;
-            }
+            SelectedIndex = index;
         }
     }
 
@@ -80,14 +140,15 @@ public sealed partial class PlaybackSubtitleTrackList : SingleSelectTrackList<Su
     {
         if (SelectedIndex >= 0 && TrackList[SelectedIndex] is { } selectedTrack &&
             _pendingSubtitleTracks.FirstOrDefault(x => ReferenceEquals(x.Track, selectedTrack)) is { } lazyTrack &&
-            (selectedTrack.VlcSpu == -1 || lazyTrack.Player.VlcPlayer.SpuCount < selectedTrack.VlcSpu))
+            (selectedTrack.MpvTrackId == -1 ||
+             !TrackList.Any(t => !ReferenceEquals(t, selectedTrack) && t.MpvTrackId == selectedTrack.MpvTrackId)))
         {
-            selectedTrack.VlcSpu = -1;
+            selectedTrack.MpvTrackId = -1;
             lazyTrack.Player.AddSubtitle(lazyTrack.File, true);
         }
     }
 
-    public void AddExternalSubtitle(VlcMediaPlayer player, StorageFile file, bool select)
+    public void AddExternalSubtitle(IMediaPlayer player, StorageFile file, bool select)
     {
         string filePath = file.Path;
 
@@ -120,32 +181,13 @@ public sealed partial class PlaybackSubtitleTrackList : SingleSelectTrackList<Su
         }
     }
 
-    internal void NotifyTrackAdded(int trackId)
+    private int FindIndexById(long mpvTrackId)
     {
-        if (SelectedIndex >= 0 && TrackList[SelectedIndex] is { VlcSpu: -1 } selectedTrack)
+        for (int i = 0; i < TrackList.Count; i++)
         {
-            selectedTrack.VlcSpu = trackId;
-            selectedTrack.Id = trackId.ToString();
+            if (TrackList[i].MpvTrackId == mpvTrackId) return i;
         }
-    }
 
-    private void Media_ParsedChanged(object? sender, MediaParsedChangedEventArgs e)
-    {
-        if (e.ParsedStatus != MediaParsedStatus.Done) return;
-        _media.ParsedChanged -= Media_ParsedChanged;
-        AddVlcMediaTracks(_media.Tracks);
-        if (_delaySpu >= 0)
-            SelectVlcSpu(_delaySpu);
-    }
-
-    private void AddVlcMediaTracks(LibVLCSharp.Shared.MediaTrack[] tracks)
-    {
-        foreach (LibVLCSharp.Shared.MediaTrack track in tracks)
-        {
-            if (track.TrackType == TrackType.Text)
-            {
-                TrackList.Add(new SubtitleTrack(track));
-            }
-        }
+        return -1;
     }
 }
