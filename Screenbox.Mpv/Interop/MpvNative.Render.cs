@@ -11,23 +11,23 @@ internal static unsafe partial class MpvRenderNative
 {
     private const string Lib = "libmpv-2.dll";
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial int mpv_render_context_create(
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_render_context_create(
         MpvRenderContextNative** res, MpvHandleNative* mpv, MpvRenderParam* @params);
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial void mpv_render_context_free(MpvRenderContextNative* ctx);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void mpv_render_context_free(MpvRenderContextNative* ctx);
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial int mpv_render_context_render(MpvRenderContextNative* ctx, MpvRenderParam* @params);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int mpv_render_context_render(MpvRenderContextNative* ctx, MpvRenderParam* @params);
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial ulong mpv_render_context_update(MpvRenderContextNative* ctx);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ulong mpv_render_context_update(MpvRenderContextNative* ctx);
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial void mpv_render_context_set_update_callback(
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void mpv_render_context_set_update_callback(
         MpvRenderContextNative* ctx, delegate* unmanaged[Cdecl]<void*, void> cb, void* data);
 
-    [LibraryImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static partial void mpv_render_context_report_swap(MpvRenderContextNative* ctx);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void mpv_render_context_report_swap(MpvRenderContextNative* ctx);
 }
