@@ -3,6 +3,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml.Controls;
+using Screenbox.Core.Services;
 using Screenbox.Core.ViewModels;
 using Screenbox.Helpers;
 using Windows.System;
@@ -34,6 +35,9 @@ public sealed partial class PlayerControls : UserControl
     internal PlayerControlsViewModel ViewModel => (PlayerControlsViewModel)DataContext;
 
     internal CommonViewModel Common { get; }
+
+    // Casting is not supported by the mpv backend; the cast menu entry is hidden while this is false.
+    private bool IsCastSupported { get; } = Ioc.Default.GetRequiredService<ICastService>().IsSupported;
 
     private Flyout? _castFlyout;
 
