@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <Nullable>enable</Nullable>
+    <UseUwp>true</UseUwp>
+    <Platforms>x86;x64;arm64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <IsAotCompatible>true</IsAotCompatible>
+    <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Copyright>Copyright © 2023-2026 Tung Huynh</Copyright>
+  </PropertyGroup>
+
+  <!-- SPEC §D2/D7：纯 libmpv P/Invoke 绑定层，零 NuGet 依赖。
+       原生 libmpv-2.dll 由 scripts/fetch-libmpv.ps1 下载到 Screenbox/Native/<Platform>/，
+       经 Screenbox.csproj 的 <Content> 项进入 MSIX 包根（exe 同级，默认 DLL 搜索路径命中）。 -->
+</Project>
