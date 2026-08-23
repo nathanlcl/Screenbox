@@ -20,6 +20,15 @@ using Windows.UI.Xaml.Controls;
 
 namespace Screenbox.Controls;
 
+/// <summary><see cref="VideoView.RenderFailed"/> 的事件参数（XAML 事件挂接要求 EventArgs 派生）。</summary>
+public sealed class RenderFailedEventArgs : EventArgs
+{
+    public RenderFailedEventArgs(Exception exception) => Exception = exception;
+
+    /// <summary>渲染线程中捕获的原始异常。</summary>
+    public Exception Exception { get; }
+}
+
 public unsafe partial class VideoView : SwapChainPanel
 {
     private D3D11 _d3d11;
@@ -37,7 +46,7 @@ public unsafe partial class VideoView : SwapChainPanel
     public event EventHandler? Initialized;
 
     /// <summary>渲染层非设备丢失类失败（双后端均不可用等）。已在 UI 线程封送。</summary>
-    public event EventHandler<Exception>? RenderFailed;
+    public event EventHandler<RenderFailedEventArgs>? RenderFailed;
 
     public static readonly DependencyProperty PlayerHandleProperty = DependencyProperty.Register(
         nameof(PlayerHandle), typeof(MpvHandle), typeof(VideoView),
@@ -181,7 +190,7 @@ public unsafe partial class VideoView : SwapChainPanel
         _dispatcherQueue.TryEnqueue(() =>
         {
             if (_loaded)
-                RenderFailed?.Invoke(this, ex);
+                RenderFailed?.Invoke(this, new RenderFailedEventArgs(ex));
         });
     }
 
