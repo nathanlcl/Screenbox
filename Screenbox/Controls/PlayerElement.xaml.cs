@@ -61,7 +61,7 @@ public sealed partial class PlayerElement : UserControl
         ViewModel.Initialize(Array.Empty<string>());
     }
 
-    private void MpvVideoView_OnRenderFailed(object sender, Exception e)
+    private void MpvVideoView_OnRenderFailed(object sender, RenderFailedEventArgs e)
     {
         // 渲染层双后端均不可用：提示用户（与 VLC 时代 D3D11 不可用提示一致）
         WeakReferenceMessenger.Default.Send(new CriticalErrorMessage(Strings.Resources.CriticalErrorDirect3D11NotAvailable));
