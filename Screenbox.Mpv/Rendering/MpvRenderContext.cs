@@ -106,12 +106,17 @@ public sealed unsafe class MpvRenderContext : IDisposable
         return new MpvRenderContext(ctx, default);
     }
 
-    /// <summary>MPV_RENDER_PARAM_OPENGL_FBO + flip_y=1（D3D 坐标系相对 GL 上下翻转）。</summary>
+    /// <summary>
+    /// MPV_RENDER_PARAM_OPENGL_FBO + flip_y=0。mpv 的"正常"渲染（flip_y=0）产出
+    /// 顶行在前的纹理内容，与 D3D11 的顶左原点一致；flip_y=1 是给 GL 默认帧缓冲
+    /// （底左原点）用的，渲染进 D3D 互操作纹理时反而会导致画面上下颠倒
+    /// （参考实现 Richasy/mpv-winui 同样用 flip_y=0）。
+    /// </summary>
     public void RenderOpenGL(int fbo, int width, int height)
     {
         AssertRenderThread();
         MpvOpenGLFBO fboParam = new() { Fbo = fbo, W = width, H = height, InternalFormat = 0 };
-        int flipY = 1;
+        int flipY = 0;
         MpvRenderParam* p = stackalloc MpvRenderParam[3];
         p[0] = new MpvRenderParam { Type = MpvRenderParamType.OpenGLFbo, Data = &fboParam };
         p[1] = new MpvRenderParam { Type = MpvRenderParamType.FlipY, Data = &flipY };
