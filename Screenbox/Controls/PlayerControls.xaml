@@ -150,6 +150,10 @@
                         <KeyboardAccelerator Key="I" Modifiers="Control" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.ToggleStatsOverlayCommand}"
+                    Icon="{ui:FontIcon Glyph=&#xE9D2;}"
+                    Text="{x:Bind strings:Resources.ToggleStatsOverlay}" />
                 <MenuFlyoutSubItem
                     x:Name="PlaybackSpeedSubMenu"
                     AccessKey="{strings:KeyboardResources Key=MenuItemSpeedKey}"
