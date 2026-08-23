@@ -71,17 +71,15 @@ public sealed class MpvMediaProbe : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         string token;
-        bool useFal;
         try
         {
             token = StorageApplicationPermissions.FutureAccessList.Add(file, "probe");
-            useFal = true;
         }
         catch (Exception)
         {
-            // FAL 不可用：回退 SharedStorageAccessManager（与 PlayerService 策略一致）
-            token = SharedStorageAccessManager.AddFile(file);
-            useFal = false;
+            // FAL 不可用则无法探测沙盒文件（SSAM 已从 SDK 26100 移除，无回退）；
+            // 探测失败按未知处理，不影响播放链路
+            return null;
         }
 
         try
@@ -93,10 +91,7 @@ public sealed class MpvMediaProbe : IDisposable
         {
             try
             {
-                if (useFal)
-                    StorageApplicationPermissions.FutureAccessList.Remove(token);
-                else
-                    SharedStorageAccessManager.RemoveFile(token);
+                StorageApplicationPermissions.FutureAccessList.Remove(token);
             }
             catch (Exception)
             {
