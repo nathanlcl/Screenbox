@@ -14,7 +14,6 @@ public sealed partial class PlayerService : IPlayerService
 {
     private readonly ILogger<PlayerService> _logger;
     private readonly ILogger _mpvLogger;
-    private readonly bool _useFal;
     private readonly Dictionary<string, int> _tokenReferences = new();
     private readonly MpvStreamFactory _streamFactory = new();
 
@@ -25,10 +24,10 @@ public sealed partial class PlayerService : IPlayerService
         _logger = logger;
         _mpvLogger = mpvLogger;
 
-        // FutureAccessList is preferred because it can handle network StorageFiles
-        // If FutureAccessList is somehow unavailable, SharedStorageAccessManager will be the fallback
-        _useFal = true;
-
+        // FutureAccessList is used for sandboxed file access tokens.
+        // NOTE: the SharedStorageAccessManager fallback was removed — the class no longer
+        // exists in the Windows SDK 26100 metadata (CS0103 at compile time). FAL is always
+        // available for packaged desktop apps, so no replacement fallback is needed.
         try
         {
             // Clear FA periodically because of 1000 items limit
@@ -42,10 +41,9 @@ public sealed partial class PlayerService : IPlayerService
                 StorageApplicationPermissions.FutureAccessList.Remove(token);
             }
         }
-        catch (Exception)   // FileNotFoundException
+        catch (Exception)
         {
-            // FutureAccessList is not available
-            _useFal = false;
+            // Best-effort cleanup only
         }
     }
 
@@ -150,27 +148,16 @@ public sealed partial class PlayerService : IPlayerService
 
     private PlaybackSource CreatePlaybackSource(IStorageFile file, params string[] options)
     {
-        // NOTE: There have been reports of network locations not working when using the URI approach.
-        // Optimization is disable until we can confirm that the issue is resolved.
-        if (file is StorageFile storageFile
-            && storageFile.Provider.Id.Equals("network", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrEmpty(storageFile.Path)
-            && !_useFal
-            && Uri.TryCreate(storageFile.Path, UriKind.Absolute, out var uri))
-        {
-            // Optimization for network files. Avoid having to deal with WinRT quirks.
-            return new PlaybackSource(uri, options, storageFile, null);
-        }
-
+        // NOTE: Upstream had a network-file URI optimization gated on FAL being unavailable.
+        // It is removed together with the SSAM fallback (see ctor note); the token path is
+        // the only path now, matching upstream behavior whenever FAL is available.
         string token = IncrementRefCount(file);
         return new PlaybackSource(new Uri($"screenbox://{token}"), options, file, token);
     }
 
     private string IncrementRefCount(IStorageFile file)
     {
-        string token = _useFal
-            ? StorageApplicationPermissions.FutureAccessList.Add(file, "media")
-            : SharedStorageAccessManager.AddFile(file);
+        string token = StorageApplicationPermissions.FutureAccessList.Add(file, "media");
 
         lock (_tokenReferences)
         {
@@ -192,15 +179,7 @@ public sealed partial class PlayerService : IPlayerService
             else
             {
                 _tokenReferences.Remove(token);
-
-                if (_useFal)
-                {
-                    StorageApplicationPermissions.FutureAccessList.Remove(token);
-                }
-                else
-                {
-                    SharedStorageAccessManager.RemoveFile(token);
-                }
+                StorageApplicationPermissions.FutureAccessList.Remove(token);
             }
         }
     }
