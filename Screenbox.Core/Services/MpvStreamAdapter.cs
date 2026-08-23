@@ -5,6 +5,7 @@
 // 本适配器始终支持 seek，正常响应该探测。
 
 using System;
+using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -123,17 +124,29 @@ public sealed class MpvStreamAdapter : IMpvStreamAdapter
 
     private int ReadCore(Span<byte> destination)
     {
-        // WinRT 读可能短读，循环补满；取消令牌让 Cancel() 能打断阻塞读
+        // WinRT 读可能短读，循环补满；取消令牌让 Cancel() 能打断阻塞读。
+        // 注意：Stream.ReadAsync 只接受 Memory<byte>（Span 无隐式转换），
+        // 经 ArrayPool 中转，分块不超过预读缓冲大小。
         int total = 0;
-        while (total < destination.Length)
+        byte[] scratch = ArrayPool<byte>.Shared.Rent(Math.Min(destination.Length, ReadAheadSize));
+        try
         {
-            int read = _stream
-                .ReadAsync(destination.Slice(total), _cancellation.Token)
-                .GetAwaiter().GetResult();
-            if (read == 0) break;   // EOF
-            total += read;
-        }
+            while (total < destination.Length)
+            {
+                int chunk = Math.Min(scratch.Length, destination.Length - total);
+                int read = _stream
+                    .ReadAsync(scratch.AsMemory(0, chunk), _cancellation.Token)
+                    .GetAwaiter().GetResult();
+                if (read == 0) break;   // EOF
+                scratch.AsSpan(0, read).CopyTo(destination.Slice(total));
+                total += read;
+            }
 
-        return total;
+            return total;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(scratch);
+        }
     }
 }
