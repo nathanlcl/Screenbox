@@ -343,7 +343,11 @@ public sealed class LibraryService : ILibraryService
         {
             try
             {
-                MediaViewModel media = _mediaFactory.GetOrCreate(new Uri(record.Path));
+                // 含 "[" "]" 的路径需转义构造（Windows System.Uri 方括号限制）
+                if (!FilesHelpers.TryCreateUriFromPath(record.Path, out Uri? mediaUri))
+                    continue;
+
+                MediaViewModel media = _mediaFactory.GetOrCreate(mediaUri);
                 media.IsFromLibrary = true;
                 if (!media.DetailsLoaded)
                 {
@@ -392,7 +396,11 @@ public sealed class LibraryService : ILibraryService
         {
             try
             {
-                MediaViewModel media = _mediaFactory.GetOrCreate(new Uri(record.Path));
+                // 含 "[" "]" 的路径需转义构造（Windows System.Uri 方括号限制）
+                if (!FilesHelpers.TryCreateUriFromPath(record.Path, out Uri? mediaUri))
+                    continue;
+
+                MediaViewModel media = _mediaFactory.GetOrCreate(mediaUri);
                 media.IsFromLibrary = true;
                 if (!media.DetailsLoaded)
                 {

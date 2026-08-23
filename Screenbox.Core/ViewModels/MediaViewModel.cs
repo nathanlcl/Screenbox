@@ -166,7 +166,9 @@ public sealed partial class MediaViewModel : ObservableRecipient
         }
         catch (Exception e)
         {
-            Messenger.Send(new MediaLoadFailedNotificationMessage(e.Message, Location));
+            // 附带异常与源类型，便于定位路径解析失败的链路（如 Windows 方括号路径问题）
+            string reason = $"{e.GetType().Name}: {e.Message} (Source: {Source.GetType().Name})";
+            Messenger.Send(new MediaLoadFailedNotificationMessage(reason, Location));
         }
 
         return item;
