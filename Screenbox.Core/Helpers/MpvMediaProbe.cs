@@ -222,10 +222,11 @@ public sealed class MpvMediaProbe : IDisposable
                 if (!TryGetString(entryMap, "filename", out string? filename) || string.IsNullOrEmpty(filename))
                     continue;
 
-                TryGetString(entryMap, "title", out string? title);
+                // 注意：外层作用域下方已有同名局部 title（CS0136），这里用 entryTitle。
+                TryGetString(entryMap, "title", out string? entryTitle);
                 bool current = entryMap.TryGetValue("current", out MpvNodeValue? currentNode) &&
                                currentNode.Kind == MpvNodeKind.Flag && currentNode.AsBoolean;
-                playlist.Add(new MpvPlaylistEntry(filename, title, current));
+                playlist.Add(new MpvPlaylistEntry(filename, entryTitle, current));
             }
         }
 
