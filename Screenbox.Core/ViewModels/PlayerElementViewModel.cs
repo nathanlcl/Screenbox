@@ -121,7 +121,9 @@ public sealed partial class PlayerElementViewModel : ObservableRecipient,
         // Unsubscribe events and set MediaPlayer to null immediately so that
         // downstream consumers (e.g. MediaListViewModel._delayPlay) know the player
         // is unavailable and queue any incoming PlayFilesMessage for later processing.
-        MediaPlayer? oldPlayer = MediaPlayer;
+        // 属性名 MediaPlayer 与 Windows.Media.Playback.MediaPlayer 类型同名；
+        // 局部变量声明中 "MediaPlayer?" 会解析为该类型（CS0029），必须显式写 IMediaPlayer。
+        IMediaPlayer? oldPlayer = MediaPlayer;
         if (oldPlayer != null)
         {
             oldPlayer.PlaybackStateChanged -= OnPlaybackStateChanged;
