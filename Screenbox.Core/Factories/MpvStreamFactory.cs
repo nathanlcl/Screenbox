@@ -72,8 +72,8 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
 
     /// <summary>
     /// 按令牌赎回文件。令牌由 PlayerService（"media"）或 MpvMediaProbe（"probe"）
-    /// 写入 FutureAccessList；FAL 不可用（或令牌不属于 FAL）时回退
-    /// SharedStorageAccessManager，与 PlayerService 的写入策略互为镜像。
+    /// 写入 FutureAccessList，此处赎回与写入侧互为镜像。
+    /// （原 SharedStorageAccessManager 回退已删：该类已从 Windows SDK 26100 元数据移除。）
     /// </summary>
     private static async Task<StorageFile> RedeemFileAsync(string token)
     {
@@ -83,12 +83,8 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
         }
         catch (Exception)
         {
-            // FileNotFoundException（令牌不在 FAL）/ FAL 不可用：回退 SSAM
+            // FileNotFoundException（令牌不在 FAL）/ FAL 不可用
+            throw new FileNotFoundException("Unable to redeem the playback access token.", token);
         }
-
-        // CreateAsync 需要 StorageFile（IStorageFile.OpenAsync 的返回类型不同）；
-        // SSAM 赎回的实际对象必然是 StorageFile。
-        return await SharedStorageAccessManager.RedeemTokenForFileAsync(token) as StorageFile
-            ?? throw new FileNotFoundException("Unable to redeem the playback access token.", token);
     }
 }
