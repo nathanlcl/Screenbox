@@ -133,38 +133,46 @@ internal sealed unsafe class WglDxInteropBackend : IRenderBackend
         Detach();
 
         // backbuffer GetBuffer(0) → 注册为 GL renderbuffer → 挂到 FBO 颜色附件
-        using Silk.NET.Core.Native.ComPtr<ID3D11Texture2D> backBuffer = default;
-        int hr = swapChain->GetBuffer(0, ref backBuffer);
-        if (hr < 0 || backBuffer.Handle == null)
-            throw new InvalidOperationException($"IDXGISwapChain::GetBuffer 失败 (0x{hr:X8})。");
-
-        // wglDXRegisterObjectNV 内部持有 D3D 资源引用；GetBuffer 取得的引用随
-        // ComPtr 作用域结束立即归还，否则 ResizeBuffers 会因未释放的引用而失败。
-        uint renderbuffer = 0;
-        _wgl.GlGenRenderbuffers(1, &renderbuffer);
-        if (renderbuffer == 0)
-            throw new InvalidOperationException("glGenRenderbuffers 失败。");
-
-        nint dxObject = _wgl.DXRegisterObjectNV(
-            _glDevice, backBuffer.Handle, renderbuffer, WglNative.GlRenderbuffer, WglNative.WglAccessReadWriteNv);
-        if (dxObject == 0)
+        // Silk.NET GetBuffer 泛型重载为 out 参数（故不能用 using 声明，显式 try/finally 释放）。
+        Silk.NET.Core.Native.ComPtr<ID3D11Texture2D> backBuffer;
+        int hr = swapChain->GetBuffer(0, out backBuffer);
+        try
         {
-            _wgl.GlDeleteRenderbuffers(1, &renderbuffer);
-            throw new InvalidOperationException("wglDXRegisterObjectNV 失败。");
+            if (hr < 0 || backBuffer.Handle == null)
+                throw new InvalidOperationException($"IDXGISwapChain::GetBuffer 失败 (0x{hr:X8})。");
+
+            // wglDXRegisterObjectNV 内部持有 D3D 资源引用；GetBuffer 取得的引用随
+            // ComPtr 作用域结束立即归还，否则 ResizeBuffers 会因未释放的引用而失败。
+            uint renderbuffer = 0;
+            _wgl.GlGenRenderbuffers(1, &renderbuffer);
+            if (renderbuffer == 0)
+                throw new InvalidOperationException("glGenRenderbuffers 失败。");
+
+            nint dxObject = _wgl.DXRegisterObjectNV(
+                _glDevice, backBuffer.Handle, renderbuffer, WglNative.GlRenderbuffer, WglNative.WglAccessReadWriteNv);
+            if (dxObject == 0)
+            {
+                _wgl.GlDeleteRenderbuffers(1, &renderbuffer);
+                throw new InvalidOperationException("wglDXRegisterObjectNV 失败。");
+            }
+
+            _renderbuffer = renderbuffer;
+            _dxObject = dxObject;
+            _width = pixelWidth;
+            _height = pixelHeight;
+
+            _wgl.GlBindFramebuffer(WglNative.GlFramebuffer, _fbo);
+            _wgl.GlFramebufferRenderbuffer(
+                WglNative.GlFramebuffer, WglNative.GlColorAttachment0, WglNative.GlRenderbuffer, renderbuffer);
+            uint status = _wgl.GlCheckFramebufferStatus(WglNative.GlFramebuffer);
+            _wgl.GlBindFramebuffer(WglNative.GlFramebuffer, 0);
+            if (status != WglNative.GlFramebufferComplete)
+                throw new InvalidOperationException($"FBO 不完整 (0x{status:X4})。");
         }
-
-        _renderbuffer = renderbuffer;
-        _dxObject = dxObject;
-        _width = pixelWidth;
-        _height = pixelHeight;
-
-        _wgl.GlBindFramebuffer(WglNative.GlFramebuffer, _fbo);
-        _wgl.GlFramebufferRenderbuffer(
-            WglNative.GlFramebuffer, WglNative.GlColorAttachment0, WglNative.GlRenderbuffer, renderbuffer);
-        uint status = _wgl.GlCheckFramebufferStatus(WglNative.GlFramebuffer);
-        _wgl.GlBindFramebuffer(WglNative.GlFramebuffer, 0);
-        if (status != WglNative.GlFramebufferComplete)
-            throw new InvalidOperationException($"FBO 不完整 (0x{status:X4})。");
+        finally
+        {
+            backBuffer.Dispose();
+        }
     }
 
     /// <inheritdoc/>
