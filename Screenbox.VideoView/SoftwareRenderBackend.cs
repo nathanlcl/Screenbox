@@ -100,12 +100,20 @@ internal sealed unsafe class SoftwareRenderBackend : IRenderBackend
         _context->UpdateSubresource(
             (ID3D11Resource*)_stagingTexture, 0, null, _pixelBuffer, (uint)stride, 0);
 
-        using Silk.NET.Core.Native.ComPtr<ID3D11Texture2D> backBuffer = default;
-        int hr = _swapChain->GetBuffer(0, ref backBuffer);
-        if (hr < 0 || backBuffer.Handle == null)
-            return;
+        // Silk.NET GetBuffer 泛型重载为 out 参数（故不能用 using 声明，显式 try/finally 释放）。
+        Silk.NET.Core.Native.ComPtr<ID3D11Texture2D> backBuffer;
+        int hr = _swapChain->GetBuffer(0, out backBuffer);
+        try
+        {
+            if (hr < 0 || backBuffer.Handle == null)
+                return;
 
-        _context->CopyResource((ID3D11Resource*)backBuffer.Handle, (ID3D11Resource*)_stagingTexture);
+            _context->CopyResource((ID3D11Resource*)backBuffer.Handle, (ID3D11Resource*)_stagingTexture);
+        }
+        finally
+        {
+            backBuffer.Dispose();
+        }
     }
 
     public void Dispose()
