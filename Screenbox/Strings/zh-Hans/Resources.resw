@@ -357,6 +357,9 @@
   <data name="Properties" xml:space="preserve">
     <value>属性</value>
   </data>
+  <data name="ToggleStatsOverlay" xml:space="preserve">
+    <value>统计信息叠加层</value>
+  </data>
   <data name="Close" xml:space="preserve">
     <value>关闭</value>
   </data>
