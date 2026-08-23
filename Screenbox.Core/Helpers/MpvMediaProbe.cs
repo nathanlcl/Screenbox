@@ -58,7 +58,9 @@ public sealed class MpvMediaProbe : IDisposable
     public Task<MpvProbeResult?> ProbeAsync(Uri uri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
-        return ProbeCoreAsync(uri.OriginalString, cancellationToken);
+        // file:// URI 还原为原生路径（mpv 对原生 Windows 路径处理更可靠，
+        // 且避免百分号转义字符在 file URL 中不被解码的问题）
+        return ProbeCoreAsync(uri.IsFile ? uri.LocalPath : uri.OriginalString, cancellationToken);
     }
 
     /// <summary>

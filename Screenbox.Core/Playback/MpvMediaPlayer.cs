@@ -333,7 +333,7 @@ public sealed partial class MpvMediaPlayer : IMediaPlayer, IMpvPlayer
             {
                 _readyToPlay = false;
                 PlaybackSource source = PlaybackItem.Source;
-                string url = source.GetPlayUrl();
+                string url = source.PlayUrl;
                 if (source.Options.Length > 0)
                 {
                     Handle.CommandNode(ParseFileOptions(source.Options), "loadfile", url, "replace");

@@ -386,7 +386,8 @@ public sealed partial class MediaViewModel : ObservableRecipient
     {
         if (uri is { IsFile: true, IsLoopback: true, IsAbsoluteUri: true })
         {
-            return await FilesHelpers.TryGetFileFromPathAsync(uri.OriginalString);
+            // 用 LocalPath 而非 OriginalString：后者可能是百分号转义的 file:/// 形式
+            return await FilesHelpers.TryGetFileFromPathAsync(uri.LocalPath);
         }
 
         return null;

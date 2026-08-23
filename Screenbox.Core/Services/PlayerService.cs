@@ -131,27 +131,24 @@ public sealed partial class PlayerService : IPlayerService
         {
             IStorageFile file => CreatePlaybackSource(file, options),
             string str => CreatePlaybackSource(str, options),
-            Uri uri => new PlaybackSource(uri, options, null, null),
+            Uri uri => new PlaybackSource(ToPlayUrl(uri), options, null, null),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
     }
 
     private PlaybackSource CreatePlaybackSource(string str, params string[] options)
     {
-        if (Uri.TryCreate(str, UriKind.Absolute, out var uri))
-        {
-            return new PlaybackSource(uri, options, null, null);
-        }
-
         // 普通 Win32 路径（库能力覆盖的位置可直接读取）。
         // 含 "[" "]" 的路径必须转义后再构造 file URI：Windows 的 System.Uri 会把
         // 方括号段误认为 IPv6 主机字面量，抛 "Invalid URI: The hostname could not be parsed"。
-        if (FilesHelpers.TryCreateUriFromPath(str, out Uri? fileUri))
+        if (Uri.TryCreate(str, UriKind.Absolute, out var uri) ||
+            FilesHelpers.TryCreateUriFromPath(str, out uri))
         {
-            return new PlaybackSource(fileUri, options, null, null);
+            return new PlaybackSource(ToPlayUrl(uri), options, null, null);
         }
 
-        return new PlaybackSource(new Uri(str), options, null, null);
+        // 无法解析为 URI 的字符串按原样交给 mpv
+        return new PlaybackSource(str, options, null, null);
     }
 
     private PlaybackSource CreatePlaybackSource(IStorageFile file, params string[] options)
@@ -160,12 +157,22 @@ public sealed partial class PlayerService : IPlayerService
         // It is removed together with the SSAM fallback (see ctor note); the token path is
         // the only path now, matching upstream behavior whenever FAL is available.
         string token = IncrementRefCount(file);
-        return new PlaybackSource(new Uri($"screenbox://{token}"), options, file, token);
+        // FAL 令牌是不透明字符串（可能含花括号等 URI 非法字符），screenbox:// 播放 URL
+        // 必须保持纯字符串，绝不能经 System.Uri 解析，否则抛
+        // "Invalid URI: The hostname could not be parsed"（上游 LibVLC 直接吃 MRL 字符串）。
+        return new PlaybackSource($"screenbox://{token}", options, file, token);
     }
+
+    /// <summary>
+    /// 将 Uri 转成 mpv <c>loadfile</c> 用的 URL 字符串；<c>file://</c> URI 还原为原生路径。
+    /// </summary>
+    private static string ToPlayUrl(Uri uri) => uri.IsFile ? uri.LocalPath : uri.AbsoluteUri;
 
     private string IncrementRefCount(IStorageFile file)
     {
         string token = StorageApplicationPermissions.FutureAccessList.Add(file, "media");
+        if (string.IsNullOrEmpty(token))
+            throw new InvalidOperationException("FutureAccessList returned an empty access token.");
 
         lock (_tokenReferences)
         {
