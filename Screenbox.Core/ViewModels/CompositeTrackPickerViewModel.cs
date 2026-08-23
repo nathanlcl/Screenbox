@@ -311,8 +311,9 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
 
     private void UpdateAudioTrackList()
     {
+        // mpv 后端轨道列表由 MpvMediaPlayer 经 PopulateTracks 主动维护（track-list
+        // observe），无需 VLC 时代的 Refresh() 重读；直接取当前快照。
         if (ItemAudioTrackList == null) return;
-        ItemAudioTrackList.Refresh();
         var trackLabels = ItemAudioTrackList.Select(track => track.Label).ToList();
         AudioTracks.SyncItems(trackLabels);
     }
@@ -320,7 +321,6 @@ public sealed partial class CompositeTrackPickerViewModel : ObservableRecipient,
     private void UpdateVideoTrackList()
     {
         if (ItemVideoTrackList == null) return;
-        ItemVideoTrackList.Refresh();
         var trackLabels = ItemVideoTrackList.Select(track => track.Label).ToList();
         VideoTracks.SyncItems(trackLabels);
     }
