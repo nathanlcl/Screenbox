@@ -47,7 +47,7 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
 
         try
         {
-            IStorageFile file = RedeemFileAsync(token).GetAwaiter().GetResult();
+            StorageFile file = RedeemFileAsync(token).GetAwaiter().GetResult();
             return CreateAsync(file).GetAwaiter().GetResult();
         }
         catch (Exception)
@@ -64,7 +64,9 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
     public static async Task<IMpvStream> CreateAsync(StorageFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
-        IRandomAccessStreamWithContentType stream = await file.OpenAsync(FileAccessMode.Read);
+        // StorageFile.OpenAsync 返回 IRandomAccessStreamWithContentType（IStorageFile
+        // 接口版返回 IRandomAccessStream）；适配器只需 IRandomAccessStream，按基类型接收。
+        IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.Read);
         return new MpvStreamAdapter(stream);
     }
 
@@ -73,7 +75,7 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
     /// 写入 FutureAccessList；FAL 不可用（或令牌不属于 FAL）时回退
     /// SharedStorageAccessManager，与 PlayerService 的写入策略互为镜像。
     /// </summary>
-    private static async Task<IStorageFile> RedeemFileAsync(string token)
+    private static async Task<StorageFile> RedeemFileAsync(string token)
     {
         try
         {
@@ -84,7 +86,9 @@ public sealed class MpvStreamFactory : IMpvStreamFactory
             // FileNotFoundException（令牌不在 FAL）/ FAL 不可用：回退 SSAM
         }
 
-        IStorageFile? file = await SharedStorageAccessManager.RedeemTokenForFileAsync(token);
-        return file ?? throw new FileNotFoundException("Unable to redeem the playback access token.", token);
+        // CreateAsync 需要 StorageFile（IStorageFile.OpenAsync 的返回类型不同）；
+        // SSAM 赎回的实际对象必然是 StorageFile。
+        return await SharedStorageAccessManager.RedeemTokenForFileAsync(token) as StorageFile
+            ?? throw new FileNotFoundException("Unable to redeem the playback access token.", token);
     }
 }
