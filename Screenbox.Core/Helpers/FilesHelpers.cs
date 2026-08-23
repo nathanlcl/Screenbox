@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Screenbox.Core.Enums;
 using Windows.Storage;
@@ -51,5 +52,20 @@ public static class FilesHelpers
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Attempts to create an absolute <see cref="Uri"/> from a path string, falling back to a
+    /// manually built file URI. On Windows, <see cref="Uri"/> fails to parse paths containing
+    /// "[" or "]" ("Invalid URI: The hostname could not be parsed") because the bracketed
+    /// segment is mistaken for an IPv6 host literal; percent-escaping the brackets avoids it.
+    /// </summary>
+    public static bool TryCreateUriFromPath(string path, [NotNullWhen(true)] out Uri? uri)
+    {
+        if (Uri.TryCreate(path, UriKind.Absolute, out uri))
+            return true;
+
+        string escaped = path.Replace('\\', '/').Replace("[", "%5B").Replace("]", "%5D");
+        return Uri.TryCreate("file:///" + escaped.TrimStart('/'), UriKind.Absolute, out uri);
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Screenbox.Core.Factories;
+using Screenbox.Core.Helpers;
 using Screenbox.Core.Playback;
 using Screenbox.Mpv;
 using Windows.Storage;
@@ -142,7 +143,14 @@ public sealed partial class PlayerService : IPlayerService
             return new PlaybackSource(uri, options, null, null);
         }
 
-        // 普通 Win32 路径（库能力覆盖的位置可直接读取）
+        // 普通 Win32 路径（库能力覆盖的位置可直接读取）。
+        // 含 "[" "]" 的路径必须转义后再构造 file URI：Windows 的 System.Uri 会把
+        // 方括号段误认为 IPv6 主机字面量，抛 "Invalid URI: The hostname could not be parsed"。
+        if (FilesHelpers.TryCreateUriFromPath(str, out Uri? fileUri))
+        {
+            return new PlaybackSource(fileUri, options, null, null);
+        }
+
         return new PlaybackSource(new Uri(str), options, null, null);
     }
 

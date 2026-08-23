@@ -11,6 +11,7 @@ using CommunityToolkit.WinUI;
 using Microsoft.Extensions.Logging;
 using Screenbox.Core.Enums;
 using Screenbox.Core.Factories;
+using Screenbox.Core.Helpers;
 using Screenbox.Core.Messages;
 using Screenbox.Core.Models;
 using Screenbox.Core.Services;
@@ -154,7 +155,9 @@ public sealed partial class PlaylistViewModel : ObservableRecipient
     {
         MediaViewModel media;
         bool existing = false;
-        if (Uri.TryCreate(record.Path, UriKind.Absolute, out var uri))
+        // 含 "[" "]" 的 Win32 路径在 Windows 的 System.Uri 下无法直接解析，需转义兜底
+        if (Uri.TryCreate(record.Path, UriKind.Absolute, out var uri) ||
+            FilesHelpers.TryCreateUriFromPath(record.Path, out uri))
         {
             if (_mediaFactory.TryGetOrCreate(uri, out var existingMedia))
             {
