@@ -58,6 +58,7 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleStatsOverlayCommand))]
     public partial bool HasActiveItem { get; set; }
 
     private IMediaPlayer? MediaPlayer => _playerContext.MediaPlayer;
@@ -436,6 +437,15 @@ public sealed partial class PlayerControlsViewModel : ObservableRecipient,
     /// to the Pictures library when the folder is not set or cannot be accessed.
     /// Sends a <see cref="FailedToSaveFrameNotificationMessage"/> on failure.
     /// </summary>
+    /// <summary>
+    /// Toggles the mpv stats overlay (video/decoder/performance details).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasActiveItem))]
+    private void ToggleStatsOverlay()
+    {
+        MediaPlayer?.ToggleStatsOverlay();
+    }
+
     [RelayCommand(CanExecute = nameof(HasVideo))]
     private async Task SaveSnapshotAsync()
     {
