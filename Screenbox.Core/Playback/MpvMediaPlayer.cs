@@ -454,6 +454,22 @@ public sealed partial class MpvMediaPlayer : IMediaPlayer, IMpvPlayer
         throw new InvalidOperationException("mpv failed to save snapshot");
     }
 
+    /// <summary>
+    /// 切换 mpv 内置 stats.lua 统计叠加层（视频/解码/性能信息）。
+    /// stats 脚本通过 create_osd_overlay 绘制，不受初始化时 osd-level=0 影响。
+    /// </summary>
+    public void ToggleStatsOverlay()
+    {
+        try
+        {
+            Handle.Command("script-binding", "stats/display-stats-toggle");
+        }
+        catch (Exception e) when (e is MpvException or ObjectDisposedException)
+        {
+            LogCommandError(_logger, e);
+        }
+    }
+
     // ---- mpv 事件 ----
 
     private void OnStartFile(object? sender, MpvEventArgs e)

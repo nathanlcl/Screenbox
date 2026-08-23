@@ -67,4 +67,9 @@ public interface IMediaPlayer
     /// Throws on failure or timeout.
     /// </summary>
     void SaveSnapshot(string filePath);
+
+    /// <summary>
+    /// Toggles an overlay showing detailed video/decoder/performance statistics.
+    /// </summary>
+    void ToggleStatsOverlay();
 }
